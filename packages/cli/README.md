@@ -15,7 +15,7 @@ npx capgo-update-lite-cli <app-id> <version> <dist-dir>
 ## Quick start
 
 ```sh
-export CAPGO_UPDATE_URL=https://ota.example.com
+export CAPGO_SERVER_URL=https://ota.example.com
 export CAPGO_ADMIN_TOKEN=<bearer-token>
 
 pnpm dlx capgo-update-lite-cli com.example.app 1.4.2 ./build
@@ -23,14 +23,17 @@ pnpm dlx capgo-update-lite-cli com.example.app 1.4.2 ./build
 
 ## Configuration layers
 
-Values are resolved in this order (highest wins):
+Every value has three interchangeable routes — CLI flag, environment variable, or config file key — and you pick whichever fits your workflow. Precedence (highest wins):
 
 1. **CLI flags** (`--server-url`, `--channel`, …) and positional args
-2. **Environment variables** (`CAPGO_UPDATE_URL`, `CAPGO_ADMIN_TOKEN`)
+2. **Environment variables** (`CAPGO_*`)
 3. **JSON config file** — `./capgo-update.json` (auto-loaded) or `--config <path>`
 4. **Built-in defaults** — `channel=production`, `activate=true`
 
-The admin token is read **only from the environment**. It is intentionally not supported in the config file to avoid accidentally committing secrets.
+The admin token is *not* special — it accepts all three routes like everything else. Some guidance:
+
+- Prefer `CAPGO_ADMIN_TOKEN` via env over `--admin-token` on the CLI. Values on the command line show up in `ps` listings.
+- If you put `"adminToken"` in the config file, gitignore that file.
 
 ### Config file example
 
@@ -59,39 +62,26 @@ Or, if you prefer positionals, skip any you've configured via defaults:
 pnpm dlx capgo-update-lite-cli com.example.app 1.4.2 ./build
 ```
 
-### Environment variables
+### Options — all three routes at a glance
 
-| Variable             | Description                                                              |
-| -------------------- | ------------------------------------------------------------------------ |
-| `CAPGO_ADMIN_TOKEN`  | Bearer token matching the server's `ADMIN_TOKEN` secret. Required unless `--dry-run`. |
-| `CAPGO_UPDATE_URL`   | Server base URL. Overridden by `--server-url` or config `serverUrl`.     |
-
-## Options
-
-### Positionals
-
-| Order | Name         | Alternative flag  |
-| ----- | ------------ | ----------------- |
-| 1     | `<app-id>`   | `--app-id <id>`   |
-| 2     | `<version>`  | `--version <s>`   |
-| 3     | `<dist-dir>` | `--dist-dir <p>`  |
-
-### Flags
-
-| Flag                            | Purpose                                                  |
-| ------------------------------- | -------------------------------------------------------- |
-| `--server-url <url>`            | OTA server base URL                                      |
-| `--channel <name>`              | Release channel (default `production`)                   |
-| `--platforms <list>`            | Comma-separated platform list: `ios,android,electron`    |
-| `--link <url>`                  | Release notes / changelog URL                            |
-| `--comment <text>`              | Operator-authored note stored with the bundle row        |
-| `--activate` / `--no-activate`  | Activate after commit (default activate)                 |
-| `--dry-run`                     | Run preflight + zip checks; skip all server writes       |
-| `--skip-preflight`              | Bypass all preflight checks (escape hatch)               |
-| `--config <path>`               | JSON config file (default `./capgo-update.json`)         |
-| `--package-json <path>`         | Path to `package.json` for the version check             |
-| `--capacitor-config <path>`     | Path to `capacitor.config.(ts\|js\|json)`                |
-| `-h`, `--help`                  | Show help                                                |
+| CLI flag                    | Environment variable         | Config file key       | Notes                                                     |
+| --------------------------- | ---------------------------- | --------------------- | --------------------------------------------------------- |
+| `<app-id>` / `--app-id`     | `CAPGO_APP_ID`               | `appId`               | Positional #1                                             |
+| `<version>` / `--version`   | `CAPGO_VERSION`              | `version`             | Positional #2                                             |
+| `<dist-dir>` / `--dist-dir` | `CAPGO_DIST_DIR`             | `distDir`             | Positional #3                                             |
+| `--server-url`              | `CAPGO_SERVER_URL`           | `serverUrl`           | OTA server base URL                                       |
+| `--admin-token`             | `CAPGO_ADMIN_TOKEN`          | `adminToken`          | Bearer token; required unless `--dry-run`                 |
+| `--channel`                 | `CAPGO_CHANNEL`              | `channel`             | Default `production`                                      |
+| `--platforms`               | `CAPGO_PLATFORMS`            | `platforms`           | `ios,android,electron` (comma-separated on CLI/env)       |
+| `--link`                    | `CAPGO_LINK`                 | `link`                | Release notes / changelog URL                             |
+| `--comment`                 | `CAPGO_COMMENT`              | `comment`             | Operator-authored note                                    |
+| `--activate` / `--no-activate` | `CAPGO_ACTIVATE`          | `activate`            | Default `true`; env accepts `true`/`false`/`1`/`0`/`yes`/`no` |
+| `--dry-run`                 | `CAPGO_DRY_RUN`              | `dryRun`              | Run preflight + zip, skip all server writes               |
+| `--skip-preflight`          | `CAPGO_SKIP_PREFLIGHT`       | `skipPreflight`       | Bypass preflight checks (escape hatch)                    |
+| `--config`                  | `CAPGO_CONFIG`               | —                     | Config file path (default `./capgo-update.json`)          |
+| `--package-json`            | `CAPGO_PACKAGE_JSON`         | `packageJson`         | Override auto-detection of `package.json`                 |
+| `--capacitor-config`        | `CAPGO_CAPACITOR_CONFIG`     | `capacitorConfig`     | Override auto-detection of `capacitor.config.(ts\|js\|json)` |
+| `-h`, `--help`              | —                            | —                     | Show help                                                 |
 
 ## Preflight checks
 

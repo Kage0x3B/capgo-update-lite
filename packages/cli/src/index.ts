@@ -2,14 +2,14 @@
 /**
  * capgo-update: publish Capacitor OTA bundles to a capgo-update-lite server.
  *
- * Sources (highest precedence first):
+ * Every value has three interchangeable routes. Precedence (highest first):
  *   1. CLI flags (--server-url, --channel, …) and positional args
- *   2. Environment variables (CAPGO_UPDATE_URL, CAPGO_ADMIN_TOKEN)
+ *   2. Environment variables (CAPGO_*)
  *   3. JSON config file (./capgo-update.json by default, or --config <path>)
  *   4. Built-in defaults (channel=production, activate=true)
  *
- * Admin token lives only in the environment — it is never read from the
- * config file to avoid accidentally committing secrets.
+ * The admin token is *not* special — it accepts all three routes. Take care:
+ * if you put `adminToken` in the config file, gitignore the file.
  *
  * Flow: preflight → zip <dist-dir> → init → PUT to R2 → commit [with activate].
  */
@@ -33,6 +33,7 @@ type FileConfig = {
     version?: string;
     distDir?: string;
     serverUrl?: string;
+    adminToken?: string;
     channel?: string;
     platforms?: Platform[];
     link?: string;
@@ -127,33 +128,37 @@ Arguments:
   <version>            Semver string for the bundle (e.g. 1.4.2)
   <dist-dir>           Path to the built web bundle (must contain index.html)
 
+Every value below can come from a CLI flag, a CAPGO_* env var, or the
+JSON config file — you pick. Precedence: CLI > env > file > default.
+
 Core options:
-  --app-id <id>        Override positional <app-id>
-  --version <semver>   Override positional <version>
-  --dist-dir <path>    Override positional <dist-dir>
-  --server-url <url>   OTA server base URL
-  --channel <name>     Release channel (default: ${DEFAULT_CHANNEL})
-  --platforms <list>   Comma-separated platform list: ${PLATFORMS.join(',')}
-  --link <url>         Release notes / changelog URL
-  --comment <text>     Operator-authored note
+  --app-id <id>        Override positional <app-id>         (env CAPGO_APP_ID)
+  --version <semver>   Override positional <version>        (env CAPGO_VERSION)
+  --dist-dir <path>    Override positional <dist-dir>       (env CAPGO_DIST_DIR)
+  --server-url <url>   OTA server base URL                  (env CAPGO_SERVER_URL)
+  --admin-token <tok>  Bearer token for /admin/* routes     (env CAPGO_ADMIN_TOKEN)
+  --channel <name>     Release channel (default: ${DEFAULT_CHANNEL})  (env CAPGO_CHANNEL)
+  --platforms <list>   Comma-separated: ${PLATFORMS.join(',')}         (env CAPGO_PLATFORMS)
+  --link <url>         Release notes / changelog URL        (env CAPGO_LINK)
+  --comment <text>     Operator-authored note               (env CAPGO_COMMENT)
 
 Behavior:
-  --activate           Activate bundle on commit (default)
-  --no-activate        Upload bundle but leave active=false
-  --dry-run            Run preflight + zip checks; skip all server writes
-  --skip-preflight     Bypass all preflight checks (use with caution)
+  --activate           Activate on commit (default)         (env CAPGO_ACTIVATE=true)
+  --no-activate        Upload but leave active=false        (env CAPGO_ACTIVATE=false)
+  --dry-run            Run preflight + zip; skip writes     (env CAPGO_DRY_RUN=true)
+  --skip-preflight     Bypass preflight (escape hatch)      (env CAPGO_SKIP_PREFLIGHT=true)
 
 Config layer:
-  --config <path>      JSON config file (default: ./capgo-update.json)
-  --package-json <p>   Path to package.json for version check (auto-detected in cwd)
-  --capacitor-config <p>   Path to capacitor.config.(ts|js|json) (auto-detected in cwd)
+  --config <path>      JSON config (default ./capgo-update.json)  (env CAPGO_CONFIG)
+  --package-json <p>   Override auto-detection              (env CAPGO_PACKAGE_JSON)
+  --capacitor-config <p>   Override auto-detection          (env CAPGO_CAPACITOR_CONFIG)
 
 Misc:
   -h, --help           Show this help
 
-Environment:
-  CAPGO_ADMIN_TOKEN    Bearer token for /admin/* routes (required unless --dry-run)
-  CAPGO_UPDATE_URL     Server base URL (overridden by --server-url / config)
+Security: prefer CAPGO_ADMIN_TOKEN via env over --admin-token on the CLI.
+Tokens on the command line appear in 'ps' listings. If you put "adminToken"
+in the config file, make sure that file is gitignored.
 
 Preflight checks (all skippable with --skip-preflight):
   • version is valid semver
@@ -190,6 +195,20 @@ async function loadConfigFile(explicit: string | undefined): Promise<FileConfig>
     return {};
 }
 
+function envStr(name: string): string | undefined {
+    const v = process.env[name];
+    return v === undefined || v === '' ? undefined : v;
+}
+
+function envBool(name: string): boolean | undefined {
+    const v = process.env[name];
+    if (v === undefined || v === '') return undefined;
+    const lower = v.toLowerCase();
+    if (lower === 'true' || lower === '1' || lower === 'yes' || lower === 'on') return true;
+    if (lower === 'false' || lower === '0' || lower === 'no' || lower === 'off') return false;
+    fail(`env ${name}: expected "true" or "false", got "${v}"`);
+}
+
 function parsePlatformList(s: string | undefined): Platform[] | undefined {
     if (!s) return undefined;
     const parts = s
@@ -221,6 +240,7 @@ async function resolveConfig(): Promise<ResolvedConfig> {
             version: { type: 'string' },
             'dist-dir': { type: 'string' },
             'server-url': { type: 'string' },
+            'admin-token': { type: 'string' },
             channel: { type: 'string' },
             platforms: { type: 'string' },
             link: { type: 'string' },
@@ -241,44 +261,49 @@ async function resolveConfig(): Promise<ResolvedConfig> {
         process.exit(0);
     }
 
-    const file = await loadConfigFile(values.config);
+    // Config file path itself resolves via CLI > env > default-search
+    const configPath = values.config ?? envStr('CAPGO_CONFIG');
+    const file = await loadConfigFile(configPath);
     validatePlatformsArray(file.platforms, 'config file');
 
-    const activateFlag = values.activate === true ? true : values['no-activate'] === true ? false : undefined;
+    const activateCli = values.activate === true ? true : values['no-activate'] === true ? false : undefined;
+    const platformsCli = parsePlatformList(values.platforms);
+    const platformsEnv = parsePlatformList(envStr('CAPGO_PLATFORMS'));
 
-    const appId = values['app-id'] ?? positionals[0] ?? file.appId ?? '';
-    const version = values.version ?? positionals[1] ?? file.version ?? '';
-    const distDir = values['dist-dir'] ?? positionals[2] ?? file.distDir ?? '';
-    const serverUrlRaw =
-        values['server-url'] ?? process.env.CAPGO_UPDATE_URL ?? file.serverUrl ?? '';
-    const serverUrl = serverUrlRaw.replace(/\/+$/, '');
+    // Generic three-route resolution: CLI > env > file > default.
+    // Positionals count as CLI for the three that accept them.
+    const appId = values['app-id'] ?? positionals[0] ?? envStr('CAPGO_APP_ID') ?? file.appId ?? '';
+    const version = values.version ?? positionals[1] ?? envStr('CAPGO_VERSION') ?? file.version ?? '';
+    const distDir = values['dist-dir'] ?? positionals[2] ?? envStr('CAPGO_DIST_DIR') ?? file.distDir ?? '';
+    const serverUrlRaw = values['server-url'] ?? envStr('CAPGO_SERVER_URL') ?? file.serverUrl ?? '';
 
     const cfg: ResolvedConfig = {
         appId,
         version,
         distDir,
-        serverUrl,
-        adminToken: process.env.CAPGO_ADMIN_TOKEN || undefined,
-        channel: values.channel ?? file.channel ?? DEFAULT_CHANNEL,
-        platforms: parsePlatformList(values.platforms) ?? file.platforms,
-        link: values.link ?? file.link,
-        comment: values.comment ?? file.comment,
-        activate: activateFlag ?? file.activate ?? true,
-        packageJson: values['package-json'] ?? file.packageJson,
-        capacitorConfig: values['capacitor-config'] ?? file.capacitorConfig,
-        skipPreflight: values['skip-preflight'] === true || file.skipPreflight === true,
-        dryRun: values['dry-run'] === true || file.dryRun === true
+        serverUrl: serverUrlRaw.replace(/\/+$/, ''),
+        adminToken: values['admin-token'] ?? envStr('CAPGO_ADMIN_TOKEN') ?? file.adminToken,
+        channel: values.channel ?? envStr('CAPGO_CHANNEL') ?? file.channel ?? DEFAULT_CHANNEL,
+        platforms: platformsCli ?? platformsEnv ?? file.platforms,
+        link: values.link ?? envStr('CAPGO_LINK') ?? file.link,
+        comment: values.comment ?? envStr('CAPGO_COMMENT') ?? file.comment,
+        activate: activateCli ?? envBool('CAPGO_ACTIVATE') ?? file.activate ?? true,
+        packageJson: values['package-json'] ?? envStr('CAPGO_PACKAGE_JSON') ?? file.packageJson,
+        capacitorConfig: values['capacitor-config'] ?? envStr('CAPGO_CAPACITOR_CONFIG') ?? file.capacitorConfig,
+        skipPreflight:
+            values['skip-preflight'] === true || envBool('CAPGO_SKIP_PREFLIGHT') === true || file.skipPreflight === true,
+        dryRun: values['dry-run'] === true || envBool('CAPGO_DRY_RUN') === true || file.dryRun === true
     };
 
     if (!cfg.appId) {
         printHelp();
-        fail('missing <app-id> (positional, --app-id, or "appId" in config file)');
+        fail('missing app-id (--app-id, positional, CAPGO_APP_ID, or "appId" in config)');
     }
-    if (!cfg.version) fail('missing <version> (positional, --version, or "version" in config file)');
-    if (!cfg.distDir) fail('missing <dist-dir> (positional, --dist-dir, or "distDir" in config file)');
-    if (!cfg.serverUrl) fail('missing --server-url (or env CAPGO_UPDATE_URL, or "serverUrl" in config file)');
+    if (!cfg.version) fail('missing version (--version, positional, CAPGO_VERSION, or "version" in config)');
+    if (!cfg.distDir) fail('missing dist-dir (--dist-dir, positional, CAPGO_DIST_DIR, or "distDir" in config)');
+    if (!cfg.serverUrl) fail('missing server-url (--server-url, CAPGO_SERVER_URL, or "serverUrl" in config)');
     if (!cfg.adminToken && !cfg.dryRun) {
-        fail('CAPGO_ADMIN_TOKEN environment variable is required (or use --dry-run)');
+        fail('missing admin token (--admin-token, CAPGO_ADMIN_TOKEN, or "adminToken" in config — or use --dry-run)');
     }
 
     return cfg;
@@ -301,7 +326,7 @@ async function main(): Promise<void> {
         await preflightCapacitorConfig(cfg);
         await preflightServerPing(cfg);
         if (cfg.adminToken) await preflightAppRegistered(cfg, target);
-        else warn('no CAPGO_ADMIN_TOKEN — skipping server-side app/version preflight');
+        else warn('no admin token — skipping server-side app/version preflight');
     }
 
     await validateDist(cfg);
