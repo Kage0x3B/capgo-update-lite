@@ -30,7 +30,7 @@ async function main(): Promise<void> {
     program
         .name('capgo-update')
         .description('CLI for a capgo-update-lite OTA server.')
-        .version(pkg.version, '-V, --version', 'print CLI version')
+        .version(pkg.version, '-V', 'print CLI version')
         .option('--server-url <url>', 'OTA server base URL (env CAPGO_SERVER_URL)')
         .option('--admin-token <token>', 'Bearer token for /admin/* (env CAPGO_ADMIN_TOKEN)')
         .option('--config <path>', 'JSON config path (default: ./capgo-update.json, env CAPGO_CONFIG)')
