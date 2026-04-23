@@ -22,7 +22,11 @@
 			// `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE`. See
 			// `.env.example` for the format.
 		}
-	]
+	],
+	"route": {
+		"custom_domain": true,
+		"pattern": "ota.example.com"
+	}
 	// Secrets (not checked in — set via `wrangler secret put <NAME>` for prod,
 	// or via .dev.vars for local):
 	//   ADMIN_TOKEN           — Bearer token for /admin/* routes
