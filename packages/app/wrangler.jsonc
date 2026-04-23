@@ -1,0 +1,64 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "capgo-update-lite",
+    "main": ".svelte-kit/cloudflare/_worker.js",
+    "compatibility_date": "2026-04-23",
+    "compatibility_flags": ["nodejs_compat"],
+    "assets": {
+        "directory": ".svelte-kit/cloudflare",
+        "binding": "ASSETS"
+    },
+    "observability": {
+        "enabled": true
+    },
+    // -------------------------------------------------------------------------
+    // Hyperdrive binding → your external Postgres database.
+    //
+    //   Deploy via the "Deploy to Cloudflare" button (README): the wizard
+    //   prompts for a Postgres connection string, creates a Hyperdrive binding
+    //   on your account, and replaces the `id` below with the provisioned one.
+    //
+    //   Manual deploys: set HYPERDRIVE_ID in your `.env` (see `.env.example`).
+    //   Wrangler substitutes ${HYPERDRIVE_ID} at deploy time.
+    // -------------------------------------------------------------------------
+    "hyperdrive": [
+        {
+            "binding": "HYPERDRIVE",
+            "id": "${HYPERDRIVE_ID}"
+        }
+    ],
+    // -------------------------------------------------------------------------
+    // R2 bucket that stores uploaded OTA bundles.
+    //
+    // The server issues presigned upload URLs via R2's S3-compatible API (using
+    // `aws4fetch`), not through this binding. The binding is declared so the
+    // Deploy-to-Cloudflare wizard auto-creates the bucket for forkers. After
+    // first deploy, you still need to mint an R2 API token and set three
+    // secrets (R2_S3_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY) — see
+    // the "Required secrets" section in README.md.
+    // -------------------------------------------------------------------------
+    "r2_buckets": [
+        {
+            "binding": "BUNDLES",
+            "bucket_name": "capgo-update-lite-bundles"
+        }
+    ]
+    // -------------------------------------------------------------------------
+    // Custom domain (optional). Without a `route` block the Worker is served
+    // at `<name>.<account>.workers.dev`. To use a custom domain, uncomment and
+    // fill in:
+    //
+    //   "route": {
+    //       "custom_domain": true,
+    //       "pattern": "ota.your-domain.example.com"
+    //   }
+    // -------------------------------------------------------------------------
+
+    // Additional secrets (not in wrangler.jsonc — set via `wrangler secret put`):
+    //   R2_S3_ENDPOINT       — https://<account-id>.<region>.r2.cloudflarestorage.com
+    //   R2_ACCESS_KEY_ID     — R2 API token access key scoped to the bundles bucket
+    //   R2_SECRET_ACCESS_KEY — matching secret key
+    //
+    // Build-time env var (set in `.env` or CF Workers Builds → Variables):
+    //   PRIVATE_ADMIN_TOKEN  — baked into the bundle via `$env/static/private`
+}

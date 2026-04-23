@@ -1,9 +1,13 @@
-# Copy to .dev.vars and fill in. .dev.vars is loaded by `wrangler dev` as the
-# Worker's runtime env. ADMIN_TOKEN is intentionally *not* listed here —
-# it's consumed via `$env/static/private` at build time; set it in `.env`.
+# Copy to `.dev.vars` and fill in. Loaded by `wrangler dev` as the Worker's
+# runtime env. The Deploy-to-Cloudflare wizard also reads this file to prompt
+# for required secrets during the initial deploy.
+#
+# PRIVATE_ADMIN_TOKEN is intentionally not listed here — it's consumed via
+# `$env/static/private` at build time; set it in `.env` instead.
 
 # R2 S3-compatible credentials. Create an R2 API token in the Cloudflare
-# dashboard scoped to the bundles bucket and paste the endpoint + keys here.
-R2_S3_ENDPOINT="https://<account-id>.r2.cloudflarestorage.com"
-R2_ACCESS_KEY_ID=""
-R2_SECRET_ACCESS_KEY=""
+# dashboard scoped to the bundles bucket, then paste the endpoint + keys here.
+# In production, set these via `wrangler secret put <NAME>`.
+R2_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=

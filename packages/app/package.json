@@ -41,5 +41,18 @@
         "postgres": "^3.4.9",
         "tailwindcss": "^4.2.4",
         "valibot": "^1.3.1"
+    },
+    "cloudflare": {
+        "bindings": {
+            "HYPERDRIVE": {
+                "description": "Postgres database via Hyperdrive. The wizard will prompt for a connection string — any Postgres (Neon, Supabase, RDS, self-hosted) works. After deploy, apply the schema with `pnpm db:push`."
+            },
+            "BUNDLES": {
+                "description": "R2 bucket for uploaded OTA bundles. The server issues **presigned upload URLs** via the R2 S3 API, so you'll also need to mint an R2 API token and set three secrets after first deploy: `R2_S3_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`. See the repo README for the full checklist."
+            },
+            "ASSETS": {
+                "description": "Static assets binding for the SvelteKit client bundle. No action needed."
+            }
+        }
     }
 }
