@@ -11,10 +11,7 @@ export const GET: RequestHandler = ({ url }) => {
             'OTA update server for @capgo/capacitor-updater. Admin endpoints use Bearer auth; plugin endpoints (`/updates`, `/stats`) always return HTTP 200 with an error envelope, because any non-200 response is treated as a network failure by the native plugin.',
         contact: { name: 'capgo-update-lite' },
         license: { name: 'MIT' },
-        servers: [
-            { url: url.origin, description: 'Current host' },
-            { url: 'https://ota.example.com', description: 'Production' }
-        ],
+        servers: [{ url: url.origin, description: 'Current host' }],
         tags: [
             {
                 name: 'plugin',

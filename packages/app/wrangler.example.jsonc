@@ -1,5 +1,12 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
+    // -- COPY THIS FILE to `wrangler.jsonc` before deploying. -----------------
+    //
+    // `wrangler.jsonc` is gitignored — it holds account-specific values
+    // (Hyperdrive binding ID, custom domain route) that shouldn't live in a
+    // public repo. Fill in the two <PLACEHOLDER> fields below.
+    //
+    // -------------------------------------------------------------------------
     "name": "capgo-update-lite",
     "main": ".svelte-kit/cloudflare/_worker.js",
     "compatibility_date": "2026-04-01",
@@ -17,15 +24,19 @@
     "hyperdrive": [
         {
             "binding": "HYPERDRIVE",
-            "id": "00000000000000000000000000000000"
+            // REPLACE with your own Hyperdrive binding ID from the Cloudflare
+            // dashboard: Workers & Pages → Hyperdrive → your-binding → ID.
+            "id": "<YOUR_HYPERDRIVE_ID>"
             // Local dev override — wrangler auto-loads `.env` and honors
             // `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE`. See
             // `.env.example` for the format.
         }
     ],
+    // REPLACE with your own custom domain, or remove this block entirely to
+    // deploy to the default `<worker-name>.<account>.workers.dev` URL.
     "route": {
         "custom_domain": true,
-        "pattern": "ota.example.com"
+        "pattern": "<your-worker-domain.example.com>"
     }
     // Secrets (not checked in — set via `wrangler secret put <NAME>` for prod,
     // or via .dev.vars for local):

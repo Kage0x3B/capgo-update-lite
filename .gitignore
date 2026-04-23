@@ -27,3 +27,4 @@ worker-configuration.d.ts
 *.log
 npm-debug.log*
 pnpm-debug.log*
+packages/app/wrangler.jsonc
