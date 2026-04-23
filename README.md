@@ -143,13 +143,27 @@ wrangler secret put R2_SECRET_ACCESS_KEY
 
 ### 3. Apply the CORS policy
 
-Edit [`packages/app/scripts/r2-cors.json`](./packages/app/scripts/r2-cors.json) — replace the placeholder origin with your dashboard's public URL. Keep the `localhost` entries if you plan to develop against a local dashboard.
+Drop the following into a local file (e.g. `cors.json`) — replace the `https://your-worker-domain.example.com` origin with the public URL of your deployed dashboard. Keep the `localhost` entries if you plan to develop against a local dev server.
 
-```sh
-CLOUDFLARE_ACCOUNT_ID=<your-account-id> bash packages/app/scripts/apply-r2-cors.sh <your-bucket-name>
+```json
+[
+    {
+        "AllowedOrigins": ["https://your-worker-domain.example.com", "http://localhost:5173", "http://localhost:5174"],
+        "AllowedMethods": ["PUT"],
+        "AllowedHeaders": ["content-type"],
+        "ExposeHeaders": ["etag"],
+        "MaxAgeSeconds": 3600
+    }
+]
 ```
 
-Script requires `wrangler` (included as a devDep) and your Cloudflare account ID.
+Apply it with wrangler (omit `--jurisdiction` if your bucket isn't in the EU jurisdiction):
+
+```sh
+wrangler r2 bucket cors put <your-bucket-name> --rules ./cors.json --jurisdiction eu
+```
+
+Or paste the same JSON in the Cloudflare dashboard: R2 → your bucket → Settings → CORS Policy.
 
 ---
 
