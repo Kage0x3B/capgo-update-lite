@@ -31,7 +31,10 @@ export function registerPublish(program: Command): void {
         .argument('[version]', 'Semver string for the bundle (e.g. 1.4.2)')
         .argument('[dist-dir]', 'Path to built web bundle (must contain index.html)')
         .option('--app-id <id>', 'Override positional <app-id>')
-        .option('--version <semver>', 'Override positional <version>')
+        .option(
+            '--bundle-version <semver>',
+            'Override positional <version>. Named to avoid collision with the root --version flag.'
+        )
         .option('--dist-dir <path>', 'Override positional <dist-dir>')
         .option('-c, --channel <name>', 'Release channel (default: production)')
         .option('-p, --platforms <list>', 'Comma-separated: ios,android,electron')
@@ -57,6 +60,9 @@ export function registerPublish(program: Command): void {
             if (appIdArg && !opts.appId) opts.appId = appIdArg;
             if (versionArg && !opts.version) opts.version = versionArg;
             if (distDirArg && !opts.distDir) opts.distDir = distDirArg;
+            // --version collides with the root CLI's built-in version flag (commander parses it at root level
+            // before dispatching to the subcommand). --bundle-version is the scripted override.
+            if (!opts.version && typeof opts.bundleVersion === 'string') opts.version = opts.bundleVersion;
 
             const cfg = await resolveConfig(this, ['serverUrl', 'appId', 'version', 'distDir']);
             if (!cfg.adminToken && !cfg.dryRun) {
