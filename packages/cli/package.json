@@ -4,11 +4,12 @@
     "description": "CLI for publishing Capacitor bundles to a capgo-update-lite OTA server.",
     "type": "module",
     "bin": {
-        "capgo-update": "./dist/index.mjs"
+        "capgo-update": "dist/index.mjs"
     },
     "files": [
         "dist",
-        "README.md"
+        "README.md",
+        "LICENSE"
     ],
     "engines": {
         "node": ">=20"
@@ -37,6 +38,21 @@
         "capacitor",
         "ota",
         "cli",
-        "publish"
-    ]
+        "publish",
+        "cloudflare-workers"
+    ],
+    "author": {
+        "name": "Moritz Hein",
+        "email": "moritz.hein@live.de"
+    },
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Kage0x3B/capgo-update-lite.git",
+        "directory": "packages/cli"
+    },
+    "homepage": "https://github.com/Kage0x3B/capgo-update-lite/tree/main/packages/cli#readme",
+    "bugs": {
+        "url": "https://github.com/Kage0x3B/capgo-update-lite/issues"
+    }
 }
