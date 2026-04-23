@@ -1,0 +1,1 @@
+CREATE INDEX "stats_events_action_time_idx" ON "stats_events" USING btree ("action","received_at");

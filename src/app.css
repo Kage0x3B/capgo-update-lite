@@ -1,0 +1,52 @@
+@import 'tailwindcss';
+
+@plugin '@tailwindcss/forms';
+
+@import '@skeletonlabs/skeleton';
+@import '@skeletonlabs/skeleton-svelte';
+@import '@skeletonlabs/skeleton/themes/cerberus';
+
+/* Bordered inputs: Skeleton's default is a subtle inset ring, which is nearly
+ * invisible on top of our `surface-100-900` cards. Swap in a real border so
+ * form fields are obvious. Applies to input, select, textarea including the
+ * file input (whose padding is also nudged so the "Choose File" button lines
+ * up with text inputs). */
+.input,
+.select,
+.textarea {
+    border: 1px solid var(--color-surface-300-700);
+}
+.input:focus,
+.select:focus,
+.textarea:focus,
+.input:focus-within,
+.select:focus-within,
+.textarea:focus-within {
+    border-color: var(--color-primary-500);
+}
+.input[type='file'] {
+    padding-block: --spacing(1.5);
+}
+
+/* Table polish: add a visible background on the header row, give body rows a
+ * slight hover highlight, and bump the row dividers so data is easy to scan
+ * on top of the dark card backgrounds. */
+.table thead {
+    background-color: var(--color-surface-100-900);
+    color: var(--color-surface-600-400);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.table thead th {
+    padding-block: --spacing(2.5);
+}
+.table tbody tr {
+    transition: background-color 120ms ease;
+}
+.table tbody tr:hover {
+    background-color: color-mix(in oklab, var(--color-surface-500) 8%, transparent);
+}
+.table tbody > :not(:last-child) {
+    border-bottom: 1px solid var(--color-surface-200-800);
+}

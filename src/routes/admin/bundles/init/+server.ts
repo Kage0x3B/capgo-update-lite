@@ -1,85 +1,36 @@
-import type { RequestHandler } from './$types';
-import { error, json } from '@sveltejs/kit';
-import * as v from 'valibot';
-import { nanoid } from 'nanoid';
-import { and, eq } from 'drizzle-orm';
-import { requireAdmin } from '$lib/server/auth.js';
-import { createDb } from '$lib/server/db/index.js';
-import { apps, bundles } from '$lib/server/db/schema.js';
-import { isValidSemver } from '$lib/server/semver.js';
-import { presignPut } from '$lib/server/r2.js';
+import { defineRoute } from '$lib/server/defineRoute.js';
 import { BundleInitSchema } from '$lib/server/validation/admin.js';
+import { BundleInitResponseSchema } from '$lib/server/validation/entities.js';
+import { initBundle } from '$lib/server/services/bundles.js';
 
-const UPLOAD_TTL_SECONDS = 900; // 15 min
-
-export const POST: RequestHandler = async ({ request, platform }) => {
-	if (!platform) throw error(500, 'Platform bindings missing');
-	requireAdmin(request, platform.env);
-
-	const body = await request.json().catch(() => null);
-	const parsed = v.safeParse(BundleInitSchema, body);
-	if (!parsed.success) {
-		throw error(400, parsed.issues.map((i) => i.message).join('; '));
-	}
-	const input = parsed.output;
-
-	if (!isValidSemver(input.version)) {
-		throw error(400, `version is not valid semver: ${input.version}`);
-	}
-
-	const channel = input.channel ?? 'production';
-	const platforms = input.platforms ?? ['ios', 'android'];
-	const r2Key = `${input.app_id}/${input.version}/${nanoid(10)}.zip`;
-
-	const handle = createDb(platform.env.HYPERDRIVE);
-	try {
-		const [app] = await handle.db.select().from(apps).where(eq(apps.id, input.app_id)).limit(1);
-		if (!app) throw error(404, `Unknown app_id: ${input.app_id}`);
-
-		const [existing] = await handle.db
-			.select({ id: bundles.id, state: bundles.state })
-			.from(bundles)
-			.where(
-				and(
-					eq(bundles.appId, input.app_id),
-					eq(bundles.channel, channel),
-					eq(bundles.version, input.version)
-				)
-			)
-			.limit(1);
-		if (existing) {
-			throw error(
-				409,
-				`bundle already exists for (${input.app_id}, ${channel}, ${input.version}) — id=${existing.id}, state=${existing.state}`
-			);
-		}
-
-		const [inserted] = await handle.db
-			.insert(bundles)
-			.values({
-				appId: input.app_id,
-				channel,
-				version: input.version,
-				platforms,
-				r2Key,
-				sessionKey: input.session_key ?? '',
-				link: input.link ?? null,
-				comment: input.comment ?? null,
-				state: 'pending',
-				active: false
-			})
-			.returning();
-
-		const uploadUrl = await presignPut(platform.env, r2Key, UPLOAD_TTL_SECONDS);
-		const expiresAt = new Date(Date.now() + UPLOAD_TTL_SECONDS * 1000).toISOString();
-
-		return json({
-			bundle_id: inserted.id,
-			r2_key: r2Key,
-			upload_url: uploadUrl,
-			expires_at: expiresAt
-		});
-	} finally {
-		platform.ctx.waitUntil(handle.close());
-	}
-};
+export const POST = defineRoute(
+    {
+        auth: 'admin',
+        body: BundleInitSchema,
+        response: BundleInitResponseSchema,
+        meta: {
+            operationId: 'initBundle',
+            summary: 'Reserve a bundle slot and get a presigned upload URL',
+            description:
+                'Creates a `pending` bundle row and returns a presigned R2 PUT URL valid for 15 minutes. Follow up with POST /admin/bundles/commit after the upload finishes.',
+            tags: ['admin']
+        },
+        examples: {
+            body: {
+                app_id: 'com.example.notes',
+                version: '1.4.2',
+                channel: 'production',
+                platforms: ['ios', 'android'],
+                link: 'https://example.com/notes/1.4.2',
+                comment: 'Fixes crash on empty note save.'
+            },
+            response: {
+                bundle_id: 42,
+                r2_key: 'com.example.notes/1.4.2/abc123nano.zip',
+                upload_url: 'https://<acct>.r2.cloudflarestorage.com/bundles/…?X-Amz-Signature=…',
+                expires_at: '2026-04-23T15:12:00.000Z'
+            }
+        }
+    },
+    async ({ body, db, platform }) => initBundle(db, platform.env, body)
+);

@@ -1,45 +1,36 @@
-import type { RequestHandler } from './$types';
-import { error, json } from '@sveltejs/kit';
-import * as v from 'valibot';
-import { requireAdmin } from '$lib/server/auth.js';
-import { createDb } from '$lib/server/db/index.js';
-import { apps } from '$lib/server/db/schema.js';
+import { defineRoute } from '$lib/server/defineRoute.js';
 import { AppCreateSchema } from '$lib/server/validation/admin.js';
+import { AppListResponseSchema, AppSchema } from '$lib/server/validation/entities.js';
+import { listApps, upsertApp } from '$lib/server/services/apps.js';
 
-export const GET: RequestHandler = async ({ request, platform }) => {
-	if (!platform) throw error(500, 'Platform bindings missing');
-	requireAdmin(request, platform.env);
-	const handle = createDb(platform.env.HYPERDRIVE);
-	try {
-		const rows = await handle.db.select().from(apps);
-		return json(rows);
-	} finally {
-		platform.ctx.waitUntil(handle.close());
-	}
-};
+export const GET = defineRoute(
+    {
+        auth: 'admin',
+        response: AppListResponseSchema,
+        meta: {
+            operationId: 'listApps',
+            summary: 'List apps',
+            tags: ['admin']
+        }
+    },
+    async ({ db }) => listApps(db)
+);
 
-export const POST: RequestHandler = async ({ request, platform }) => {
-	if (!platform) throw error(500, 'Platform bindings missing');
-	requireAdmin(request, platform.env);
-
-	const body = await request.json().catch(() => null);
-	const parsed = v.safeParse(AppCreateSchema, body);
-	if (!parsed.success) {
-		throw error(400, parsed.issues.map((i) => i.message).join('; '));
-	}
-
-	const handle = createDb(platform.env.HYPERDRIVE);
-	try {
-		const [row] = await handle.db
-			.insert(apps)
-			.values({ id: parsed.output.id, name: parsed.output.name })
-			.onConflictDoUpdate({
-				target: apps.id,
-				set: { name: parsed.output.name }
-			})
-			.returning();
-		return json(row, { status: 201 });
-	} finally {
-		platform.ctx.waitUntil(handle.close());
-	}
-};
+export const POST = defineRoute(
+    {
+        auth: 'admin',
+        body: AppCreateSchema,
+        response: AppSchema,
+        successStatus: 201,
+        meta: {
+            operationId: 'upsertApp',
+            summary: 'Create or rename an app',
+            description: 'Inserts a new app or updates the name of an existing one (upsert on id).',
+            tags: ['admin']
+        },
+        examples: {
+            body: { id: 'com.example.notes', name: 'Notes' }
+        }
+    },
+    async ({ body, db }) => upsertApp(db, body)
+);

@@ -7,17 +7,13 @@ import type { Bundle } from './db/schema.js';
  * and triggers rollback. Mirror of Capgo's `simpleError200` (see
  * capgo-backend/supabase/functions/_backend/utils/hono.ts:282).
  */
-export function err200(
-	code: string,
-	message: string,
-	extra: Record<string, unknown> = {}
-): Response {
-	return json({ error: code, message, ...extra }, { status: 200 });
+export function err200(code: string, message: string, extra: Record<string, unknown> = {}): Response {
+    return json({ error: code, message, ...extra }, { status: 200 });
 }
 
 /** Canonical `{ status: 'ok' }` success payload. */
 export function bres(extra: Record<string, unknown> = {}): Response {
-	return json({ status: 'ok', ...extra }, { status: 200 });
+    return json({ status: 'ok', ...extra }, { status: 200 });
 }
 
 /**
@@ -28,13 +24,13 @@ export function bres(extra: Record<string, unknown> = {}): Response {
  * Mirrors `resToVersion` in capgo-backend/.../utils/update.ts:26.
  */
 export function resToVersion(bundle: Bundle, url: string): Response {
-	const body: Record<string, unknown> = {
-		version: bundle.version,
-		url,
-		session_key: bundle.sessionKey ?? '',
-		checksum: bundle.checksum
-	};
-	if (bundle.link) body.link = bundle.link;
-	if (bundle.comment) body.comment = bundle.comment;
-	return json(body, { status: 200 });
+    const body: Record<string, unknown> = {
+        version: bundle.version,
+        url,
+        session_key: bundle.sessionKey ?? '',
+        checksum: bundle.checksum
+    };
+    if (bundle.link) body.link = bundle.link;
+    if (bundle.comment) body.comment = bundle.comment;
+    return json(body, { status: 200 });
 }

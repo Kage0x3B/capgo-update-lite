@@ -1,0 +1,220 @@
+import * as v from 'valibot';
+
+/**
+ * Shared entity/response schemas.
+ *
+ * Two jobs in one module:
+ *   1. Runtime: mirror Drizzle row types so handlers returning from `.select()`
+ *      / `.returning()` type-check against `response: EntitySchema`.
+ *   2. Docs: carry `v.title / v.description / v.examples` metadata that the
+ *      OpenAPI generator materialises into `components.schemas` and reuses
+ *      via `$ref`.
+ */
+
+// --- reusable field-level schemas -------------------------------------------
+
+export const AppIdField = v.pipe(
+    v.string(),
+    v.description('Reverse-domain app identifier.'),
+    v.examples(['com.example.notes'])
+);
+
+export const VersionField = v.pipe(v.string(), v.description('Semantic version string.'), v.examples(['1.4.2']));
+
+export const ChannelField = v.pipe(
+    v.string(),
+    v.description('Release channel. Devices only receive bundles whose channel matches their `defaultChannel`.'),
+    v.examples(['production'])
+);
+
+export const PlatformField = v.pipe(
+    v.picklist(['ios', 'android', 'electron'] as const),
+    v.description('Target platform.'),
+    v.examples(['ios'])
+);
+
+export const DeviceIdField = v.pipe(
+    v.string(),
+    v.description('Device UUID, lowercased server-side.'),
+    v.examples(['8b1c7b5c-1b2a-4f0b-9a74-3e3d6ad2d2fa'])
+);
+
+// --- entities ---------------------------------------------------------------
+
+export const AppSchema = v.pipe(
+    v.object({
+        id: AppIdField,
+        name: v.pipe(v.string(), v.description('Display name.'), v.examples(['Notes'])),
+        createdAt: v.date()
+    }),
+    v.title('App'),
+    v.description('A registered mobile app.')
+);
+export type AppResponse = v.InferOutput<typeof AppSchema>;
+
+export const BundleSchema = v.pipe(
+    v.object({
+        id: v.pipe(v.number(), v.description('Server-assigned bundle id.')),
+        appId: AppIdField,
+        channel: ChannelField,
+        version: VersionField,
+        platforms: v.pipe(
+            v.array(v.string()),
+            v.description('Platforms this bundle is eligible for.'),
+            v.examples([['ios', 'android']])
+        ),
+        r2Key: v.pipe(v.string(), v.description('Object key of the uploaded ZIP in R2.')),
+        checksum: v.pipe(
+            v.string(),
+            v.description('Lowercase sha256 hex digest of the uploaded ZIP (empty while pending).')
+        ),
+        sessionKey: v.pipe(v.string(), v.description('Optional encryption session key — empty string when none.')),
+        link: v.nullable(v.pipe(v.string(), v.description('Release notes / changelog URL.'))),
+        comment: v.nullable(v.pipe(v.string(), v.description('Operator-authored note.'))),
+        active: v.pipe(v.boolean(), v.description('Whether this bundle currently resolves for its (app_id, channel).')),
+        state: v.pipe(
+            v.string(),
+            v.description('Lifecycle state: `pending` → `active` → `failed`.'),
+            v.examples(['active'])
+        ),
+        releasedAt: v.nullable(v.date()),
+        createdAt: v.date()
+    }),
+    v.title('Bundle'),
+    v.description('An OTA bundle row.')
+);
+export type BundleResponse = v.InferOutput<typeof BundleSchema>;
+
+export const BundleListResponseSchema = v.array(BundleSchema);
+export const AppListResponseSchema = v.array(AppSchema);
+
+export const StatsEventSchema = v.pipe(
+    v.object({
+        id: v.string(),
+        receivedAt: v.date(),
+        appId: AppIdField,
+        deviceId: DeviceIdField,
+        action: v.nullable(v.string()),
+        versionName: v.nullable(v.string()),
+        oldVersionName: v.nullable(v.string()),
+        platform: v.nullable(v.string()),
+        pluginVersion: v.nullable(v.string()),
+        isEmulator: v.nullable(v.boolean()),
+        isProd: v.nullable(v.boolean())
+    }),
+    v.title('StatsEvent'),
+    v.description('A single telemetry event as persisted in stats_events.')
+);
+export type StatsEventResponse = v.InferOutput<typeof StatsEventSchema>;
+export const StatsEventListResponseSchema = v.array(StatsEventSchema);
+
+export const BundleInitResponseSchema = v.pipe(
+    v.object({
+        bundle_id: v.pipe(v.number(), v.description('ID of the reserved bundle row.')),
+        r2_key: v.pipe(v.string(), v.description('Object key the client must PUT to.')),
+        upload_url: v.pipe(v.string(), v.description('Presigned S3 PUT URL, valid for 15 minutes.')),
+        expires_at: v.pipe(
+            v.string(),
+            v.description('ISO-8601 UTC timestamp when the upload_url stops being accepted.')
+        )
+    }),
+    v.title('BundleInitResponse'),
+    v.description('Response to POST /admin/bundles/init.')
+);
+
+export const BundleDeleteResponseSchema = v.union([
+    BundleSchema,
+    v.pipe(
+        v.object({
+            deleted: v.pipe(v.number(), v.description('ID of the purged bundle.')),
+            purged: v.literal(true)
+        }),
+        v.title('BundlePurged'),
+        v.description('Returned when DELETE /admin/bundles/{id}?purge=1 hard-deletes the bundle.')
+    )
+]);
+
+// --- plugin-facing responses ------------------------------------------------
+
+/** Error codes /updates can emit inside its always-200 body. */
+export const UPDATES_ERROR_CODES = [
+    'invalid_request',
+    'unsupported_plugin_version',
+    'no_bundle',
+    'no_new_version_available',
+    'semver_error',
+    'no_bundle_url',
+    'server_misconfigured'
+] as const;
+
+/** Error codes /stats can emit inside its always-200 body. */
+export const STATS_ERROR_CODES = ['invalid_request', 'server_misconfigured', 'internal_error'] as const;
+
+export const UpdatesErrorCode = v.picklist(UPDATES_ERROR_CODES);
+
+/** Shape returned by /updates when a newer bundle is available. */
+export const UpdateAvailableSchema = v.pipe(
+    v.object({
+        version: VersionField,
+        url: v.pipe(v.string(), v.description('Presigned R2 GET URL the plugin will download.')),
+        session_key: v.string(),
+        checksum: v.pipe(v.string(), v.description('Sha256 hex, lowercase.')),
+        link: v.optional(v.string()),
+        comment: v.optional(v.string())
+    }),
+    v.title('UpdateAvailable'),
+    v.description('Success shape for POST /updates when a new bundle is available.')
+);
+
+/** err200 envelope shared across plugin routes. */
+export const PluginErrorSchema = v.pipe(
+    v.object({
+        error: v.pipe(v.string(), v.description('Error code — see operation description for the set.')),
+        message: v.pipe(v.string(), v.description('Human-readable diagnostic.'))
+    }),
+    v.title('PluginError'),
+    v.description(
+        'Always-HTTP-200 error envelope used by /updates and /stats. Non-200 responses would be treated as network failures by the native Capgo plugin.'
+    )
+);
+
+/** Single-event /stats success shape. */
+export const StatsSingleOkSchema = v.pipe(v.object({ status: v.literal('ok') }), v.title('StatsSingleOk'));
+
+/** Batch-mode /stats response shape. */
+export const StatsBatchResponseSchema = v.pipe(
+    v.object({
+        status: v.literal('ok'),
+        results: v.array(
+            v.union([
+                v.object({ status: v.literal('ok'), index: v.number() }),
+                v.object({
+                    status: v.literal('error'),
+                    error: v.string(),
+                    message: v.string(),
+                    index: v.number()
+                })
+            ])
+        )
+    }),
+    v.title('StatsBatchResponse'),
+    v.description('Per-item status list when the request body was an array.')
+);
+
+/** Combined /stats response (body can be single event or batch). */
+export const StatsResponseSchema = v.union([StatsSingleOkSchema, StatsBatchResponseSchema]);
+
+// --- named-schema registry (exposed in components.schemas) ------------------
+
+/**
+ * The registry of schemas that should appear in `components.schemas` and be
+ * referenced via `$ref` anywhere they're used. Name = OpenAPI schema name.
+ */
+export const NAMED_SCHEMAS = {
+    App: AppSchema,
+    Bundle: BundleSchema,
+    StatsEvent: StatsEventSchema,
+    BundleInitResponse: BundleInitResponseSchema,
+    UpdateAvailable: UpdateAvailableSchema,
+    PluginError: PluginErrorSchema
+} as const;

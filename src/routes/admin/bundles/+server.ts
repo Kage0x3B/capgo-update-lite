@@ -1,37 +1,19 @@
-import type { RequestHandler } from './$types';
-import { error, json } from '@sveltejs/kit';
-import { and, desc, eq } from 'drizzle-orm';
-import { requireAdmin } from '$lib/server/auth.js';
-import { createDb } from '$lib/server/db/index.js';
-import { bundles } from '$lib/server/db/schema.js';
+import { defineRoute } from '$lib/server/defineRoute.js';
+import { BundleListQuerySchema } from '$lib/server/validation/admin.js';
+import { BundleListResponseSchema } from '$lib/server/validation/entities.js';
+import { listBundles } from '$lib/server/services/bundles.js';
 
-export const GET: RequestHandler = async ({ request, url, platform }) => {
-	if (!platform) throw error(500, 'Platform bindings missing');
-	requireAdmin(request, platform.env);
-
-	const appId = url.searchParams.get('app_id');
-	const channel = url.searchParams.get('channel');
-	const state = url.searchParams.get('state');
-	const activeParam = url.searchParams.get('active');
-
-	const filters = [
-		appId ? eq(bundles.appId, appId) : undefined,
-		channel ? eq(bundles.channel, channel) : undefined,
-		state ? eq(bundles.state, state) : undefined,
-		activeParam === 'true' || activeParam === 'false'
-			? eq(bundles.active, activeParam === 'true')
-			: undefined
-	].filter((x): x is Exclude<typeof x, undefined> => x !== undefined);
-
-	const handle = createDb(platform.env.HYPERDRIVE);
-	try {
-		const rows = await handle.db
-			.select()
-			.from(bundles)
-			.where(filters.length ? and(...filters) : undefined)
-			.orderBy(desc(bundles.createdAt));
-		return json(rows);
-	} finally {
-		platform.ctx.waitUntil(handle.close());
-	}
-};
+export const GET = defineRoute(
+    {
+        auth: 'admin',
+        query: BundleListQuerySchema,
+        response: BundleListResponseSchema,
+        meta: {
+            operationId: 'listBundles',
+            summary: 'List bundles',
+            description: 'Returns bundles filtered by app_id, channel, state, and/or active flag.',
+            tags: ['admin']
+        }
+    },
+    async ({ query, db }) => listBundles(db, query)
+);

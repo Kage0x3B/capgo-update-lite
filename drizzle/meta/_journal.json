@@ -8,6 +8,13 @@
       "when": 1776872527181,
       "tag": "0000_crazy_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776947814715,
+      "tag": "0001_steady_frightful_four",
+      "breakpoints": true
     }
   ]
 }

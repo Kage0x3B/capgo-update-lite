@@ -1,33 +1,161 @@
 import * as v from 'valibot';
 
 const REVERSE_DOMAIN = /^[a-z0-9]+(\.[\w-]+)+$/i;
-const PLATFORM = v.picklist(['ios', 'android', 'electron'] as const);
+const PLATFORM = v.pipe(v.picklist(['ios', 'android', 'electron'] as const), v.description('Target platform.'));
+
+const AppIdInput = v.pipe(
+    v.string(),
+    v.regex(REVERSE_DOMAIN),
+    v.maxLength(128),
+    v.description('Reverse-domain app identifier.'),
+    v.examples(['com.example.notes'])
+);
+const VersionInput = v.pipe(
+    v.string(),
+    v.minLength(1),
+    v.maxLength(64),
+    v.description('Semantic version (strict semver required).'),
+    v.examples(['1.4.2'])
+);
+const ChannelInput = v.pipe(
+    v.string(),
+    v.minLength(1),
+    v.maxLength(64),
+    v.description('Release channel.'),
+    v.examples(['production'])
+);
+const LinkInput = v.pipe(
+    v.string(),
+    v.maxLength(2048),
+    v.description('Release notes / changelog URL.'),
+    v.examples(['https://example.com/notes/1.4.2'])
+);
+const CommentInput = v.pipe(v.string(), v.maxLength(2048), v.description('Operator-authored note.'));
 
 export const AppCreateSchema = v.object({
-	id: v.pipe(v.string(), v.regex(REVERSE_DOMAIN), v.maxLength(128)),
-	name: v.pipe(v.string(), v.minLength(1), v.maxLength(256))
+    id: AppIdInput,
+    name: v.pipe(v.string(), v.minLength(1), v.maxLength(256), v.description('Display name.'), v.examples(['Notes']))
 });
 
 export const BundleInitSchema = v.object({
-	app_id: v.pipe(v.string(), v.regex(REVERSE_DOMAIN), v.maxLength(128)),
-	version: v.pipe(v.string(), v.minLength(1), v.maxLength(64)),
-	channel: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(64))),
-	platforms: v.optional(v.pipe(v.array(PLATFORM), v.minLength(1))),
-	session_key: v.optional(v.string()),
-	link: v.optional(v.pipe(v.string(), v.maxLength(2048))),
-	comment: v.optional(v.pipe(v.string(), v.maxLength(2048)))
+    app_id: AppIdInput,
+    version: VersionInput,
+    channel: v.optional(ChannelInput),
+    platforms: v.optional(
+        v.pipe(
+            v.array(PLATFORM),
+            v.minLength(1),
+            v.description('Platforms this bundle should resolve for.'),
+            v.examples([['ios', 'android']])
+        )
+    ),
+    session_key: v.optional(v.pipe(v.string(), v.description('Optional encryption session key.'))),
+    link: v.optional(LinkInput),
+    comment: v.optional(CommentInput)
 });
 
 export const BundleCommitSchema = v.object({
-	bundle_id: v.pipe(v.number(), v.integer(), v.minValue(1)),
-	checksum: v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/i)),
-	activate: v.optional(v.boolean())
+    bundle_id: v.pipe(
+        v.number(),
+        v.integer(),
+        v.minValue(1),
+        v.description('ID returned from POST /admin/bundles/init.'),
+        v.examples([42])
+    ),
+    checksum: v.pipe(
+        v.string(),
+        v.regex(/^[0-9a-f]{64}$/i),
+        v.description('Sha256 hex of the uploaded ZIP — re-hashed server-side to verify.'),
+        v.examples(['e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'])
+    ),
+    activate: v.optional(
+        v.pipe(
+            v.boolean(),
+            v.description('If true, atomically deactivates siblings in (app_id, channel) and activates this one.')
+        )
+    )
+});
+
+const BOOL_STRING = v.pipe(
+    v.picklist(['true', 'false'] as const),
+    v.transform((s) => s === 'true')
+);
+
+export const BundleListQuerySchema = v.object({
+    app_id: v.optional(AppIdInput),
+    channel: v.optional(ChannelInput),
+    state: v.optional(
+        v.pipe(
+            v.string(),
+            v.minLength(1),
+            v.maxLength(32),
+            v.description('Lifecycle state filter.'),
+            v.examples(['active'])
+        )
+    ),
+    active: v.optional(v.pipe(BOOL_STRING, v.description('Filter by resolvable bundles only.')))
+});
+
+export const BundleIdParamsSchema = v.object({
+    id: v.pipe(
+        v.string(),
+        v.regex(/^[1-9][0-9]*$/, 'id must be a positive integer'),
+        v.transform(Number),
+        v.integer(),
+        v.minValue(1),
+        v.description('Numeric bundle id.'),
+        v.examples([42])
+    )
+});
+
+export const BundleDeleteQuerySchema = v.object({
+    purge: v.optional(
+        v.pipe(v.picklist(['1'] as const), v.description('If "1", hard-delete the bundle (R2 object + DB row).'))
+    )
 });
 
 export const BundlePatchSchema = v.object({
-	active: v.optional(v.boolean()),
-	channel: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(64))),
-	platforms: v.optional(v.pipe(v.array(PLATFORM), v.minLength(1))),
-	link: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(2048)))),
-	comment: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(2048))))
+    active: v.optional(
+        v.pipe(v.boolean(), v.description('Activate this bundle and deactivate siblings in (app_id, channel).'))
+    ),
+    channel: v.optional(ChannelInput),
+    platforms: v.optional(v.pipe(v.array(PLATFORM), v.minLength(1))),
+    link: v.optional(v.nullable(LinkInput)),
+    comment: v.optional(v.nullable(CommentInput))
+});
+
+const ISO_DATE = v.pipe(
+    v.string(),
+    v.isoTimestamp('must be an ISO-8601 timestamp'),
+    v.transform((s) => new Date(s))
+);
+const INT_STRING = v.pipe(
+    v.string(),
+    v.regex(/^\d+$/, 'must be a non-negative integer'),
+    v.transform(Number),
+    v.integer(),
+    v.minValue(0)
+);
+
+export const StatsListQuerySchema = v.object({
+    app_id: v.optional(AppIdInput),
+    action: v.optional(
+        v.pipe(
+            v.string(),
+            v.minLength(1),
+            v.maxLength(64),
+            v.description('Action name filter.'),
+            v.examples(['update'])
+        )
+    ),
+    since: v.optional(v.pipe(ISO_DATE, v.description('Only events received at or after this timestamp.'))),
+    until: v.optional(v.pipe(ISO_DATE, v.description('Only events received strictly before.'))),
+    limit: v.optional(
+        v.pipe(INT_STRING, v.maxValue(1000), v.description('Max rows to return (≤1000).'), v.examples([100]))
+    ),
+    offset: v.optional(v.pipe(INT_STRING, v.description('Skip rows.')))
+});
+
+export const LoginSchema = v.object({
+    password: v.pipe(v.string(), v.minLength(1), v.maxLength(512))
 });

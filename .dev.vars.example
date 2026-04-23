@@ -1,5 +1,6 @@
-# Copy to .dev.vars and fill in. .dev.vars is loaded by `wrangler dev`.
-ADMIN_TOKEN="change-me-long-random-string"
+# Copy to .dev.vars and fill in. .dev.vars is loaded by `wrangler dev` as the
+# Worker's runtime env. ADMIN_TOKEN is intentionally *not* listed here —
+# it's consumed via `$env/static/private` at build time; set it in `.env`.
 
 # R2 S3-compatible credentials. Create an R2 API token in the Cloudflare
 # dashboard scoped to the bundles bucket and paste the endpoint + keys here.
