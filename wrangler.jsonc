@@ -1,0 +1,33 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "capgo-update-lite",
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"compatibility_date": "2026-04-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"assets": {
+		"directory": ".svelte-kit/cloudflare",
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true
+	},
+	// R2 is accessed via the S3 API (presigned URLs + aws4fetch) rather than
+	// through a binding, so dev and prod behave identically. Credentials live
+	// in Wrangler secrets / .dev.vars (R2_S3_ENDPOINT + access keys).
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "00000000000000000000000000000000"
+			// Local dev override — wrangler auto-loads `.env` and honors
+			// `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE`. See
+			// `.env.example` for the format.
+		}
+	]
+	// Secrets (not checked in — set via `wrangler secret put <NAME>` for prod,
+	// or via .dev.vars for local):
+	//   ADMIN_TOKEN           — Bearer token for /admin/* routes
+	//   R2_S3_ENDPOINT        — full R2 S3 endpoint URL (includes account + jurisdiction)
+	//                           e.g. https://<acct>.eu.r2.cloudflarestorage.com
+	//   R2_ACCESS_KEY_ID      — R2 API access key scoped to the bundles bucket
+	//   R2_SECRET_ACCESS_KEY  — matching secret
+}

@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# sveltekit / vite build output
+.svelte-kit/
+build/
+dist/
+
+# cloudflare wrangler state + generated types
+.wrangler/
+worker-configuration.d.ts
+
+# secrets (local only)
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# editors / OS
+.DS_Store
+.vscode/
+.idea/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

@@ -1,0 +1,8 @@
+# Copy to .dev.vars and fill in. .dev.vars is loaded by `wrangler dev`.
+ADMIN_TOKEN="change-me-long-random-string"
+
+# R2 S3-compatible credentials. Create an R2 API token in the Cloudflare
+# dashboard scoped to the bundles bucket and paste the endpoint + keys here.
+R2_S3_ENDPOINT="https://<account-id>.r2.cloudflarestorage.com"
+R2_ACCESS_KEY_ID=""
+R2_SECRET_ACCESS_KEY=""
