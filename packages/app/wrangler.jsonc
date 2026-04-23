@@ -16,15 +16,17 @@
     //
     //   Deploy via the "Deploy to Cloudflare" button (README): the wizard
     //   prompts for a Postgres connection string, creates a Hyperdrive binding
-    //   on your account, and replaces the `id` below with the provisioned one.
+    //   on your account, and replaces the placeholder id below with the
+    //   provisioned one.
     //
-    //   Manual deploys: set HYPERDRIVE_ID in your `.env` (see `.env.example`).
-    //   Wrangler substitutes ${HYPERDRIVE_ID} at deploy time.
+    //   Manual deploys: replace the placeholder id with your own Hyperdrive
+    //   binding id from the Cloudflare dashboard (Workers & Pages → Hyperdrive
+    //   → your binding → ID) before running `wrangler deploy`.
     // -------------------------------------------------------------------------
     "hyperdrive": [
         {
             "binding": "HYPERDRIVE",
-            "id": "${HYPERDRIVE_ID}"
+            "id": "00000000000000000000000000000000"
         }
     ],
     // -------------------------------------------------------------------------

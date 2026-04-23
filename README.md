@@ -2,7 +2,7 @@
 
 Lightweight OTA update server for [`@capgo/capacitor-updater`](https://github.com/Cap-go/capacitor-updater), built for Cloudflare Workers + R2 + Hyperdrive (Postgres). Ships with a publish CLI.
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Kage0x3B/capgo-update-lite)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Kage0x3B/capgo-update-lite/tree/main/packages/app)
 
 This monorepo has two packages:
 
@@ -37,6 +37,10 @@ You'll need a Cloudflare account, an R2 bucket (the wizard creates it), and a Po
 git clone https://github.com/Kage0x3B/capgo-update-lite.git
 cd capgo-update-lite
 pnpm install
+
+# Edit packages/app/wrangler.jsonc — replace the placeholder Hyperdrive
+# id with your own (Cloudflare dashboard → Workers & Pages → Hyperdrive).
+$EDITOR packages/app/wrangler.jsonc
 
 # Fill in Postgres connection string, PRIVATE_ADMIN_TOKEN, etc.
 cp packages/app/.env.example packages/app/.env
