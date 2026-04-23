@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+        "target": "es2022",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "resolveJsonModule": true,
+        "noEmit": true,
+        "declaration": true,
+        "types": ["node"],
+        "lib": ["es2022"]
+    },
+    "include": ["src/**/*.ts", "tsdown.config.ts"]
+}

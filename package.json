@@ -1,0 +1,27 @@
+{
+    "name": "capgo-update-lite-monorepo",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "pnpm -F ./packages/app dev",
+        "build": "pnpm -F ./packages/app build",
+        "deploy": "pnpm -F ./packages/app deploy",
+        "check": "pnpm -r check",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "db:generate": "pnpm -F ./packages/app db:generate",
+        "db:migrate": "pnpm -F ./packages/app db:migrate",
+        "db:push": "pnpm -F ./packages/app db:push",
+        "db:studio": "pnpm -F ./packages/app db:studio",
+        "publish-bundle": "pnpm -F ./packages/cli dev --"
+    },
+    "devDependencies": {
+        "prettier": "^3.8.3",
+        "prettier-plugin-svelte": "^3.5.1",
+        "prettier-plugin-tailwindcss": "0.7.3"
+    },
+    "engines": {
+        "node": ">=20"
+    },
+    "packageManager": "pnpm@10.33.0"
+}

@@ -1,9 +1,9 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 /**
  * Publish a built SvelteKit/Capacitor bundle to capgo-update-lite.
  *
  * Usage:
- *   pnpm publish-bundle <app-id> <version> <dist-dir> [--activate]
+ *   capgo-update <app-id> <version> <dist-dir> [--activate]
  *
  * Env:
  *   OTA_BASE_URL   e.g. http://localhost:8787 or https://ota.example.com
@@ -52,7 +52,7 @@ function parseArgs(argv: string[]): {
         else positional.push(arg);
     }
     if (positional.length !== 3) {
-        die('usage: publish-bundle <app-id> <version> <dist-dir> [--activate]');
+        die('usage: capgo-update <app-id> <version> <dist-dir> [--activate]');
     }
     return { appId: positional[0], version: positional[1], dist: positional[2], activate };
 }
