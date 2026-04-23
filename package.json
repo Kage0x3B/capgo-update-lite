@@ -3,9 +3,9 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "pnpm -F ./packages/app dev",
         "build": "pnpm -F ./packages/app build",
-        "deploy": "pnpm -F ./packages/app deploy",
+        "deploy": "pnpm -F ./packages/app build && pnpm -F ./packages/app deploy",
+        "dev": "pnpm -F ./packages/app dev",
         "check": "pnpm -r check",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
