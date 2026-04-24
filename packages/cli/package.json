@@ -1,10 +1,10 @@
 {
     "name": "capgo-update-lite-cli",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "CLI for publishing Capacitor bundles to a capgo-update-lite OTA server.",
     "type": "module",
     "bin": {
-        "capgo-update": "dist/index.mjs"
+        "capgo-update-lite": "dist/index.mjs"
     },
     "files": [
         "dist",
@@ -42,7 +42,8 @@
     ],
     "author": {
         "name": "Moritz Hein",
-        "email": "moritz.hein@live.de"
+        "email": "moritz.hein@live.de",
+        "url": "https://moritz.website"
     },
     "license": "MIT",
     "repository": {
