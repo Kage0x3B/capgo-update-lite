@@ -22,6 +22,12 @@ Click **Deploy to Cloudflare** above. The wizard:
 3. Prompts you for a Postgres connection string, creates a Hyperdrive binding, replaces the placeholder id in `wrangler.jsonc`.
 4. Builds the SvelteKit worker and deploys.
 
+Before clicking "Deploy", open **Advanced settings** and add a build-time variable named `PRIVATE_ADMIN_TOKEN`. That token gates `/admin/*` and the dashboard login; it's consumed via `$env/static/private` at build time, so it has to be set before the build runs (not via `wrangler secret put`). Generate one with:
+
+```sh
+openssl rand -hex 16
+```
+
 Three follow-ups after the first deploy. The worker will log errors until they're done:
 
 1. **Apply the DB schema.** Run `pnpm db:push`. Details: [Postgres + Drizzle setup](#postgres--drizzle-setup).
