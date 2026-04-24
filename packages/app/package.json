@@ -3,6 +3,11 @@
     "version": "0.0.1",
     "private": true,
     "type": "module",
+    "author": {
+        "name": "Moritz Hein",
+        "email": "moritz.hein@live.de",
+        "url": "https://moritz.website"
+    },
     "scripts": {
         "build": "vite build",
         "deploy": "wrangler deploy",

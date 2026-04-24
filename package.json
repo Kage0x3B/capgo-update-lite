@@ -23,5 +23,10 @@
     "engines": {
         "node": ">=20"
     },
-    "packageManager": "pnpm@10.33.0"
+    "packageManager": "pnpm@10.33.0",
+    "author": {
+        "name": "Moritz Hein",
+        "email": "moritz.hein@live.de",
+        "url": "https://moritz.website"
+    }
 }
