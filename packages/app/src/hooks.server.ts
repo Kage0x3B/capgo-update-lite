@@ -22,7 +22,7 @@ export const handle: Handle = async ({ event, resolve }) => {
             redirect(303, `${LOGIN_PATH}?next=${encodeURIComponent(next)}`);
         }
         if (event.locals.admin && onLogin) {
-            redirect(303, '/dashboard/apps');
+            redirect(303, '/dashboard');
         }
     }
 

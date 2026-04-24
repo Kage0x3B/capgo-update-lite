@@ -6,7 +6,7 @@ import { SESSION_COOKIE, issueSession } from '$lib/server/session.js';
 import type { Actions, PageServerLoad } from './$types.js';
 
 export const load: PageServerLoad = async ({ url }) => {
-    return { next: url.searchParams.get('next') ?? '/dashboard/apps' };
+    return { next: url.searchParams.get('next') ?? '/dashboard' };
 };
 
 export const actions: Actions = {
@@ -28,7 +28,7 @@ export const actions: Actions = {
         cookies.set(SESSION_COOKIE, session.value, session.options);
 
         const next = url.searchParams.get('next');
-        redirect(303, safeNext(next) ?? '/dashboard/apps');
+        redirect(303, safeNext(next) ?? '/dashboard');
     }
 };
 
