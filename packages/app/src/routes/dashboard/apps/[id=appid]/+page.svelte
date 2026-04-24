@@ -10,6 +10,8 @@
 
     let version = $state('');
     let channel = $state('production');
+    let minAndroidBuild = $state('');
+    let minIosBuild = $state('');
     let activateOnCommit = $state(false);
     let files = $state<FileList | null>(null);
     let phase = $state<Phase>('idle');
@@ -18,6 +20,7 @@
 
     let rowBusy = $state<Record<number, boolean>>({});
     let confirmingPurge = $state<number | null>(null);
+    let expandedNative = $state<Record<number, boolean>>({});
 
     async function submitUpload(e: SubmitEvent) {
         e.preventDefault();
@@ -33,10 +36,18 @@
             uploadNote = `zipped ${Math.round(size / 1024)} KB (sha256 ${sha256.slice(0, 12)}…)`;
 
             phase = 'reserving';
+            // Default min builds to the bundle version when the operator leaves
+            // the fields blank — matches the common case of bumping native and
+            // OTA together. Native-package fingerprinting only runs through the
+            // CLI, so dashboard uploads always send an empty fingerprint.
+            const trimmedVersion = version.trim();
             const init = await initBundle({
                 app_id: appId,
-                version: version.trim(),
-                channel: channel.trim() || undefined
+                version: trimmedVersion,
+                channel: channel.trim() || undefined,
+                min_android_build: minAndroidBuild.trim() || trimmedVersion,
+                min_ios_build: minIosBuild.trim() || trimmedVersion,
+                native_packages: {}
             });
 
             phase = 'uploading';
@@ -60,6 +71,8 @@
 
             uploadNote = `published bundle ${init.bundle_id} (${version.trim()})`;
             version = '';
+            minAndroidBuild = '';
+            minIosBuild = '';
             files = null;
             activateOnCommit = false;
         } catch (err) {
@@ -139,6 +152,12 @@
         >
             Stats
         </a>
+        <a
+            href="/dashboard/apps/{appId}/settings"
+            class="text-surface-600-400 hover:text-surface-950-50 -mb-px border-b-2 border-transparent px-1 pb-2"
+        >
+            Settings
+        </a>
     </nav>
 </header>
 
@@ -163,6 +182,16 @@
                     {...{ webkitdirectory: '', directory: '' } as Record<string, string>}
                     required
                 />
+            </label>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+            <label class="label">
+                <span class="label-text">Min Android versionName</span>
+                <input class="input" bind:value={minAndroidBuild} placeholder="defaults to bundle version" />
+            </label>
+            <label class="label">
+                <span class="label-text">Min iOS CFBundleShortVersionString</span>
+                <input class="input" bind:value={minIosBuild} placeholder="defaults to bundle version" />
             </label>
         </div>
         <label class="flex items-center gap-2 text-sm">
@@ -192,6 +221,8 @@
                     <tr>
                         <th>ID</th>
                         <th>Version</th>
+                        <th>Min Android</th>
+                        <th>Min iOS</th>
                         <th>Channel</th>
                         <th>Platforms</th>
                         <th>State</th>
@@ -202,9 +233,12 @@
                 </thead>
                 <tbody>
                     {#each list as b}
+                        {@const nativeCount = Object.keys(b.nativePackages).length}
                         <tr>
                             <td class="text-surface-600-400">{b.id}</td>
                             <td><code>{b.version}</code></td>
+                            <td><code class="text-xs">{b.minAndroidBuild}</code></td>
+                            <td><code class="text-xs">{b.minIosBuild}</code></td>
                             <td>{b.channel}</td>
                             <td class="text-xs">{b.platforms.join(', ')}</td>
                             <td>
@@ -233,6 +267,16 @@
                             </td>
                             <td class="text-surface-600-400 text-xs">{fmtDate(b.releasedAt)}</td>
                             <td class="space-x-2 text-right whitespace-nowrap">
+                                {#if nativeCount > 0}
+                                    <button
+                                        class="badge preset-tonal"
+                                        title="Toggle native-package fingerprint"
+                                        onclick={() =>
+                                            (expandedNative[b.id] = !expandedNative[b.id])}
+                                    >
+                                        {nativeCount} native deps
+                                    </button>
+                                {/if}
                                 {#if b.state !== 'failed'}
                                     <button
                                         class="btn btn-sm preset-tonal"
@@ -264,6 +308,35 @@
                                 {/if}
                             </td>
                         </tr>
+                        {#if expandedNative[b.id] && nativeCount > 0}
+                            <tr class="bg-surface-50-950">
+                                <td colspan="10">
+                                    <div class="px-3 py-2">
+                                        <p class="text-surface-600-400 mb-2 text-xs">
+                                            Native-dep fingerprint captured at publish time. Drives
+                                            the CLI's <code>--auto-min-update-build</code>
+                                            decision.
+                                        </p>
+                                        <table class="table table-compact text-xs">
+                                            <thead>
+                                                <tr>
+                                                    <th>Package</th>
+                                                    <th>Version</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {#each Object.entries(b.nativePackages).sort( ([a], [c]) => a.localeCompare(c) ) as [pkg, ver] (pkg)}
+                                                    <tr>
+                                                        <td><code>{pkg}</code></td>
+                                                        <td><code>{ver}</code></td>
+                                                    </tr>
+                                                {/each}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </td>
+                            </tr>
+                        {/if}
                     {/each}
                 </tbody>
             </table>

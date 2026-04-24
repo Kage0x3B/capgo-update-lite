@@ -1,7 +1,10 @@
 import type { Command } from 'commander';
 import { apiJson, type AppRow } from '../api.js';
 import { resolveConfig } from '../config.js';
-import { done, printJson, table } from '../output.js';
+import { done, fail, printJson, table } from '../output.js';
+
+const CEILINGS = ['none', 'patch', 'minor', 'major'] as const;
+type Ceiling = (typeof CEILINGS)[number];
 
 export function registerApps(program: Command): void {
     const apps = program.command('apps').description('Manage apps registered on the server.');
@@ -21,8 +24,15 @@ export function registerApps(program: Command): void {
                 return;
             }
             table(
-                ['ID', 'NAME', 'CREATED'],
-                rows.map((r) => [r.id, r.name, new Date(r.createdAt).toISOString().slice(0, 10)])
+                ['ID', 'NAME', 'CEILING', 'UNDER-NATIVE', 'MIN-PLUGIN', 'CREATED'],
+                rows.map((r) => [
+                    r.id,
+                    r.name,
+                    r.disableAutoUpdate,
+                    r.disableAutoUpdateUnderNative ? 'on' : 'off',
+                    r.minPluginVersion ?? '—',
+                    new Date(r.createdAt).toISOString().slice(0, 10)
+                ])
             );
         });
 
@@ -39,5 +49,66 @@ export function registerApps(program: Command): void {
                 { id: appId, name }
             );
             done(`Registered ${row.id} ("${row.name}")`);
+        });
+
+    apps.command('set-policy <app-id>')
+        .description('Update per-app compatibility policy.')
+        .option('--name <name>', 'Rename the app')
+        .option(
+            '--disable-auto-update <ceiling>',
+            `Upgrade-class ceiling: ${CEILINGS.join('|')}`
+        )
+        .option(
+            '--disable-auto-update-under-native',
+            'Refuse OTA bundles older than device native (default for new apps)'
+        )
+        .option(
+            '--no-disable-auto-update-under-native',
+            'Allow serving OTA bundles whose semver is below the device native version'
+        )
+        .option(
+            '--min-plugin-version <semver>',
+            'Minimum @capgo/capacitor-updater version (use "null" to clear)'
+        )
+        .action(async function action(this: Command, appId: string): Promise<void> {
+            const cfg = await resolveConfig(this, ['serverUrl', 'adminToken']);
+            const opts = this.opts<{
+                name?: string;
+                disableAutoUpdate?: string;
+                disableAutoUpdateUnderNative?: boolean;
+                minPluginVersion?: string;
+            }>();
+
+            const patch: Record<string, unknown> = {};
+            if (opts.name !== undefined) patch.name = opts.name;
+            if (opts.disableAutoUpdate !== undefined) {
+                if (!CEILINGS.includes(opts.disableAutoUpdate as Ceiling)) {
+                    fail(
+                        `--disable-auto-update must be one of: ${CEILINGS.join(', ')} (got "${opts.disableAutoUpdate}")`
+                    );
+                }
+                patch.disable_auto_update = opts.disableAutoUpdate;
+            }
+            if (opts.disableAutoUpdateUnderNative !== undefined) {
+                patch.disable_auto_update_under_native = opts.disableAutoUpdateUnderNative;
+            }
+            if (opts.minPluginVersion !== undefined) {
+                patch.min_plugin_version =
+                    opts.minPluginVersion === 'null' ? null : opts.minPluginVersion;
+            }
+
+            if (Object.keys(patch).length === 0) {
+                fail('nothing to update — pass at least one of --name, --disable-auto-update, --disable-auto-update-under-native / --no-…, --min-plugin-version');
+            }
+
+            const row = await apiJson<AppRow>(
+                { serverUrl: cfg.serverUrl!, adminToken: cfg.adminToken },
+                'PATCH',
+                `/admin/apps/${encodeURIComponent(appId)}`,
+                patch
+            );
+            done(
+                `Updated ${row.id}: ceiling=${row.disableAutoUpdate}, under-native=${row.disableAutoUpdateUnderNative ? 'on' : 'off'}, min-plugin=${row.minPluginVersion ?? '—'}`
+            );
         });
 }

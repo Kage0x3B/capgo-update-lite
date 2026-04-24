@@ -11,6 +11,9 @@ export const PLATFORMS: readonly Platform[] = ['ios', 'android', 'electron'] as 
 export type AppRow = {
     id: string;
     name: string;
+    disableAutoUpdate: 'none' | 'major' | 'minor' | 'patch';
+    disableAutoUpdateUnderNative: boolean;
+    minPluginVersion: string | null;
     createdAt: string;
 };
 
@@ -25,11 +28,15 @@ export type BundleRow = {
     sessionKey: string;
     link: string | null;
     comment: string | null;
+    minAndroidBuild: string;
+    minIosBuild: string;
+    nativePackages: Record<string, string>;
     active: boolean;
     state: string;
     releasedAt: string | null;
     createdAt: string;
 };
+
 
 export type StatsEventRow = {
     id: string;

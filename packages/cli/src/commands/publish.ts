@@ -12,6 +12,7 @@ import { done, fail, kv, ok, step, warn } from '../output.js';
 import {
     preflightAppRegistered,
     preflightCapacitorConfig,
+    preflightNativeBuild,
     preflightPackageJson,
     preflightServerPing,
     validateDist
@@ -48,6 +49,14 @@ export function registerPublish(program: Command): void {
         .option('--version-exists-ok', 'Exit 0 if the version is already published (CI-friendly)')
         .option('--package-json <path>', 'Override auto-detection of package.json')
         .option('--capacitor-config <path>', 'Override auto-detection of capacitor.config')
+        .option('--min-android-build <semver>', 'Minimum native Android versionName required by this bundle')
+        .option('--min-ios-build <semver>', 'Minimum native iOS CFBundleShortVersionString required by this bundle')
+        .option(
+            '--auto-min-update-build',
+            'Inherit min builds from the previously-active bundle if native deps unchanged; bump to detected native versions if they changed'
+        )
+        .option('--android-project <path>', 'Path to Android project root (default: ./android)')
+        .option('--ios-project <path>', 'Path to iOS project root (default: ./ios)')
         .action(async function action(
             this: Command,
             appIdArg: string | undefined,
@@ -76,9 +85,14 @@ export function registerPublish(program: Command): void {
 
             if (cfg.skipPreflight) {
                 warn('--skip-preflight set — bypassing preflight checks');
+                // Even with --skip-preflight we still need min builds + native
+                // fingerprint to populate the init payload; the server rejects
+                // a bundle without them.
+                await preflightNativeBuild(cfg);
             } else {
                 await preflightPackageJson(cfg, target);
                 await preflightCapacitorConfig(cfg);
+                await preflightNativeBuild(cfg);
                 await preflightServerPing(cfg.serverUrl!);
                 if (cfg.adminToken) {
                     const result = await preflightAppRegistered(cfg, target);
@@ -112,7 +126,10 @@ export function registerPublish(program: Command): void {
             const initPayload: Record<string, unknown> = {
                 app_id: cfg.appId,
                 version: cfg.version,
-                channel: cfg.channel
+                channel: cfg.channel,
+                min_android_build: cfg.minAndroidBuild,
+                min_ios_build: cfg.minIosBuild,
+                native_packages: cfg.nativePackages ?? {}
             };
             if (cfg.platforms) initPayload.platforms = cfg.platforms;
             if (cfg.link) initPayload.link = cfg.link;

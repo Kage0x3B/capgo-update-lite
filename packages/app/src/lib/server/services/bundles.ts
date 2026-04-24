@@ -44,6 +44,9 @@ export type InitBundleInput = {
     session_key?: string;
     link?: string;
     comment?: string;
+    min_android_build: string;
+    min_ios_build: string;
+    native_packages: Record<string, string>;
 };
 
 export type InitBundleResult = {
@@ -56,6 +59,16 @@ export type InitBundleResult = {
 export async function initBundle(db: Db, env: R2Env, input: InitBundleInput): Promise<InitBundleResult> {
     if (!isValidSemver(input.version)) {
         throw new ApiError(400, 'invalid_request', `version is not valid semver: ${input.version}`);
+    }
+    if (!isValidSemver(input.min_android_build)) {
+        throw new ApiError(
+            400,
+            'invalid_request',
+            `min_android_build is not valid semver: ${input.min_android_build}`
+        );
+    }
+    if (!isValidSemver(input.min_ios_build)) {
+        throw new ApiError(400, 'invalid_request', `min_ios_build is not valid semver: ${input.min_ios_build}`);
     }
 
     const channel = input.channel ?? 'production';
@@ -89,6 +102,9 @@ export async function initBundle(db: Db, env: R2Env, input: InitBundleInput): Pr
             sessionKey: input.session_key ?? '',
             link: input.link ?? null,
             comment: input.comment ?? null,
+            minAndroidBuild: input.min_android_build,
+            minIosBuild: input.min_ios_build,
+            nativePackages: input.native_packages,
             state: 'pending',
             active: false
         })

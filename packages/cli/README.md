@@ -64,6 +64,11 @@ Options specific to `publish`:
 | `--version-exists-ok`           | Exit 0 if the version is already published (CI-friendly)                |
 | `--package-json <path>`         | Override auto-detection of `package.json`                               |
 | `--capacitor-config <path>`     | Override auto-detection of `capacitor.config.(ts\|js\|json)`            |
+| `--min-android-build <semver>`  | Minimum native Android versionName required by this bundle              |
+| `--min-ios-build <semver>`      | Minimum native iOS CFBundleShortVersionString required by this bundle   |
+| `--auto-min-update-build`       | Inherit min builds from the previous bundle when native deps are unchanged; bump to detected native versions when they changed |
+| `--android-project <path>`      | Path to Android project root (default `./android`)                      |
+| `--ios-project <path>`          | Path to iOS project root (default `./ios`)                              |
 
 ### `init`
 
@@ -90,6 +95,20 @@ Register a new app.
 ```sh
 pnpx capgo-update-lite-cli apps add <app-id> --name <display-name>
 ```
+
+### `apps set-policy`
+
+Update an app's compatibility policy. Only the flags you pass are changed; omit a flag to leave that field untouched.
+
+```sh
+pnpx capgo-update-lite-cli apps set-policy <app-id> \
+  [--name <display-name>] \
+  [--disable-auto-update none|patch|minor|major] \
+  [--disable-auto-update-under-native | --no-disable-auto-update-under-native] \
+  [--min-plugin-version <semver>|null]
+```
+
+`--min-plugin-version null` clears the floor. Without `--no-disable-auto-update-under-native` the under-native guard stays at whatever value the server holds.
 
 ### `bundles list`
 
@@ -196,6 +215,11 @@ Rows marked "publish-only" are only read by the `publish` subcommand. Everything
 | `--version-exists-ok`         | n/a                       | n/a               | publish-only | Exit 0 if the version is already published                |
 | `--package-json <path>`       | `CAPGO_PACKAGE_JSON`      | `packageJson`     | publish-only | Override auto-detection of `package.json`                 |
 | `--capacitor-config <path>`   | `CAPGO_CAPACITOR_CONFIG`  | `capacitorConfig` | publish-only | Override auto-detection of `capacitor.config.(ts\|js\|json)` |
+| `--min-android-build <semver>`| `CAPGO_MIN_ANDROID_BUILD` | `minAndroidBuild` | publish-only | Minimum native Android versionName required by this bundle |
+| `--min-ios-build <semver>`    | `CAPGO_MIN_IOS_BUILD`     | `minIosBuild`     | publish-only | Minimum native iOS CFBundleShortVersionString required by this bundle |
+| `--auto-min-update-build`     | `CAPGO_AUTO_MIN_UPDATE_BUILD` | `autoMinUpdateBuild` | publish-only | Inherit min builds from prev bundle if native deps unchanged; bump otherwise |
+| `--android-project <path>`    | `CAPGO_ANDROID_PROJECT`   | `androidProject`  | publish-only | Native Android project root (default `./android`)         |
+| `--ios-project <path>`        | `CAPGO_IOS_PROJECT`       | `iosProject`      | publish-only | Native iOS project root (default `./ios`)                 |
 | `-V, --version`               | n/a                       | n/a               | global       | Print CLI version                                         |
 | `-h, --help`                  | n/a                       | n/a               | global       | Show help (supported on every subcommand)                 |
 
@@ -206,6 +230,7 @@ All of these can be bypassed with `--skip-preflight`. Checks that rely on local 
 - **Semver validity.** Rejects malformed `<version>`.
 - **`package.json` alignment.** `<version>` must be `>=` the `package.json` version. Major bumps emit a warning so you can confirm the native shell supports the new bundle.
 - **`capacitor.config.(ts|js|json)` alignment.** Its `appId` must match `<app-id>`. The `CapacitorUpdater.updateUrl`, if set, should start with the server URL (warning only).
+- **Native build resolution.** Reads `versionName` from `android/app/build.gradle(.kts)` and `CFBundleShortVersionString` from `ios/App/App/Info.plist` to default `min_android_build` and `min_ios_build`. Explicit `--min-android-build` / `--min-ios-build` override. Fails if neither explicit value nor a native project is available.
 - **Server ping.** `GET /` with a 5s timeout.
 - **App registered.** `GET /admin/apps` must include `<app-id>` (requires an admin token).
 - **Version progression.** The new version must be strictly greater than the currently-active bundle on the channel. Duplicates and downgrades fail; `--version-exists-ok` converts "already active" to exit 0 for CI.
@@ -213,6 +238,32 @@ All of these can be bypassed with `--skip-preflight`. Checks that rely on local 
 - **`notifyAppReady()` source scan.** At least one `.js` file under `<dist-dir>` must reference `notifyAppReady`. Without that call the plugin rolls back after 10 seconds. Disable with `--no-code-check` if your build minifies the symbol away.
 - **Zip integrity.** The generated ZIP is re-parsed to verify structural validity.
 - **Size bounds.** Less than 1 KB fails (likely an empty build). Over 50 MB warns (slow on cellular). Over 500 MB fails.
+
+## Compatibility guards
+
+Every uploaded bundle carries three pieces of native-compatibility metadata. The server uses them to decide whether a given device should receive the bundle:
+
+- `min_android_build`: minimum Android `versionName` the native shell must report.
+- `min_ios_build`: minimum iOS `CFBundleShortVersionString` the native shell must report.
+- `native_packages`: fingerprint of `@capacitor/*`, `@capacitor-community/*`, `@ionic-enterprise/*`, `cordova-plugin-*`, and `capacitor-*` / `capacitor-plugin-*` deps from `package.json`, with resolved versions at publish time.
+
+If the device's `version_build` (what the plugin reports from the native project) is lower than the matching `min_*_build`, `/updates` returns `below_min_native_build` and the plugin keeps its current bundle.
+
+### How `--auto-min-update-build` decides
+
+With `--auto-min-update-build` (or `autoMinUpdateBuild: true` in config), the CLI queries the previously-active bundle on `(appId, channel)` and compares its `native_packages` fingerprint with the current one:
+
+- Fingerprint unchanged: inherit `min_android_build` / `min_ios_build` from the previous bundle. No native shell reship needed.
+- Fingerprint changed (added, removed, or version-bumped native dep): set the min builds to the detected native versions (`android/app/build.gradle` and `ios/App/App/Info.plist`) and print which packages changed.
+- No previous bundle: use the detected native versions.
+
+### Per-app policies
+
+The server also enforces three per-app policies stored on the `apps` row. Configure them via `PATCH /admin/apps/<app-id>`:
+
+- `disable_auto_update`: `none` (default), `patch`, `minor`, or `major`. Blocks auto-updates at or above the configured class.
+- `disable_auto_update_under_native`: boolean (default `true`). Refuses to serve a bundle whose semver is lower than the device's native `version_build`.
+- `min_plugin_version`: semver string or null. Devices running an older `@capgo/capacitor-updater` plugin are rejected with `unsupported_plugin_version`.
 
 ## Publish flow
 

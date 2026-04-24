@@ -1,9 +1,10 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { defineRoute } from '$lib/server/defineRoute.js';
-import { bundles } from '$lib/server/db/schema.js';
+import { apps, bundles } from '$lib/server/db/schema.js';
 import { err200, resToVersion } from '$lib/server/responses.js';
-import { isNewer, isValidSemver } from '$lib/server/semver.js';
+import { isNewer, parseSemver } from '$lib/server/semver.js';
 import { presignGet } from '$lib/server/r2.js';
+import { evaluateUpdate } from '$lib/server/services/updateDecision.js';
 import { UpdatesRequestSchema } from '$lib/server/validation/updates.js';
 import { UpdateAvailableSchema, UPDATES_ERROR_CODES } from '$lib/server/validation/entities.js';
 
@@ -53,8 +54,18 @@ export const POST = defineRoute(
         }
     },
     async ({ body, platform, db }) => {
-        if (!isValidSemver(body.plugin_version)) {
+        const pluginSv = parseSemver(body.plugin_version);
+        if (!pluginSv) {
             return err200('unsupported_plugin_version', `plugin_version is not valid semver: ${body.plugin_version}`);
+        }
+        // version_build carries the native shell's user-facing version string
+        // (versionName on Android, CFBundleShortVersionString on iOS) and gates
+        // every per-platform min-build and no-downgrade-under-native comparison
+        // below. The plugin sentinels 'builtin' / 'unknown' never appear here —
+        // those only show up in version_name.
+        const buildSv = parseSemver(body.version_build);
+        if (!buildSv) {
+            return err200('invalid_version_build', `version_build is not valid semver: ${body.version_build}`);
         }
 
         // device_id is lowercased server-side before any DB I/O — parity with
@@ -62,6 +73,9 @@ export const POST = defineRoute(
         // appear as duplicates across endpoints.
         const deviceId = body.device_id.toLowerCase();
         void deviceId; // referenced by /stats; no DB write on /updates itself yet
+
+        const [app] = await db.select().from(apps).where(eq(apps.id, body.app_id)).limit(1);
+        if (!app) return err200('no_app', `Unknown app_id: ${body.app_id}`);
 
         const rows = await db
             .select()
@@ -89,6 +103,16 @@ export const POST = defineRoute(
         }
 
         if (!shouldUpdate) return err200('no_new_version_available', 'No new version available');
+
+        // All remaining compatibility logic (plugin floor, min native build,
+        // no-downgrade-under-native, upgrade-class ceiling) lives in the pure
+        // evaluateUpdate() so it's unit-testable without a DB. Mirror the
+        // function's step order in services/updateDecision.ts if you add cases.
+        const decision = evaluateUpdate({ app, bundle, body, pluginSv, buildSv });
+        if (decision.kind === 'error') {
+            return err200(decision.code, decision.message, decision.extra);
+        }
+
         if (!bundle.r2Key) return err200('no_bundle_url', 'Cannot get bundle url');
 
         const url = await presignGet(platform.env, bundle.r2Key);

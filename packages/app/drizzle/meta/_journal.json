@@ -15,6 +15,13 @@
       "when": 1776947814715,
       "tag": "0001_steady_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777033863746,
+      "tag": "0002_smiling_mephistopheles",
+      "breakpoints": true
     }
   ]
 }

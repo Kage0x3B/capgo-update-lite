@@ -9,7 +9,8 @@ import path from 'node:path';
 import { apiJson, type AppRow, type BundleRow } from './api.js';
 import type { ResolvedConfig } from './config.js';
 import { cmpSemver, parseSemver, type Semver } from './semver.js';
-import { fail, ok, warn } from './output.js';
+import { collectNativePackages, fingerprintDiff, readAndroidVersionName, readIosShortVersion, sameNativeFingerprint } from './native.js';
+import { fail, kv, ok, warn } from './output.js';
 import { collectFiles } from './zip.js';
 
 const PREFLIGHT_PING_TIMEOUT_MS = 5000;
@@ -136,6 +137,115 @@ export async function preflightAppRegistered(cfg: ResolvedConfig, target: Semver
     }
     ok(`current active on "${cfg.channel}": ${current.version} (bundle_id=${current.id})`);
     return 'ok';
+}
+
+/**
+ * Resolves cfg.minAndroidBuild, cfg.minIosBuild, and cfg.nativePackages.
+ *
+ * Order of operations:
+ *   1. If both min-*-build flags are explicit, validate them as semver and stop.
+ *   2. Otherwise read native versions off the Android / iOS project directories
+ *      and use those as defaults.
+ *   3. Collect the native-package fingerprint from package.json.
+ *   4. If --auto-min-update-build is set, compare the fingerprint against the
+ *      previously-active bundle on (appId, channel). Unchanged fingerprint +
+ *      previous bundle ⇒ inherit its min builds. Changed fingerprint ⇒ bump to
+ *      the detected native versions and log what changed.
+ *
+ * Mutates `cfg` in place. Fails loudly when a required value can't be resolved.
+ */
+export async function preflightNativeBuild(cfg: ResolvedConfig): Promise<void> {
+    const pkgPath = resolvePackageJsonPath(cfg);
+    const currentNativePkgs = pkgPath ? await collectNativePackages(pkgPath) : {};
+    cfg.nativePackages = currentNativePkgs;
+
+    let explicitAndroid = cfg.minAndroidBuild;
+    let explicitIos = cfg.minIosBuild;
+
+    if (explicitAndroid) {
+        if (!parseSemver(explicitAndroid)) fail(`--min-android-build "${explicitAndroid}" is not valid semver`);
+    }
+    if (explicitIos) {
+        if (!parseSemver(explicitIos)) fail(`--min-ios-build "${explicitIos}" is not valid semver`);
+    }
+
+    // Auto-detect from native projects when either flag is missing, or when
+    // --auto-min-update-build is on (we need the current native versions to
+    // know what to bump min_*_build to if the fingerprint changed).
+    let detectedAndroid: string | null = null;
+    let detectedIos: string | null = null;
+    if (!explicitAndroid || !explicitIos || cfg.autoMinUpdateBuild) {
+        const androidRoot = path.resolve(process.cwd(), cfg.androidProject);
+        const iosRoot = path.resolve(process.cwd(), cfg.iosProject);
+        detectedAndroid = await readAndroidVersionName(androidRoot);
+        detectedIos = await readIosShortVersion(iosRoot);
+        if (detectedAndroid) kv('android versionName', `${detectedAndroid} (${cfg.androidProject})`);
+        if (detectedIos) kv('ios CFBundleShortVersionString', `${detectedIos} (${cfg.iosProject})`);
+    }
+
+    if (cfg.autoMinUpdateBuild) {
+        if (!cfg.adminToken) {
+            fail('--auto-min-update-build needs an admin token to fetch the previous bundle');
+        }
+        const prev = await fetchLastActiveBundle(cfg);
+        if (!prev) {
+            ok('no previous bundle on this channel — using detected native versions as min builds');
+            explicitAndroid = explicitAndroid ?? requireDetected(detectedAndroid, 'android');
+            explicitIos = explicitIos ?? requireDetected(detectedIos, 'ios');
+        } else {
+            const diff = fingerprintDiff(prev.nativePackages ?? {}, currentNativePkgs);
+            const changed = !sameNativeFingerprint(prev.nativePackages ?? {}, currentNativePkgs);
+            if (!changed) {
+                ok(`native deps unchanged vs bundle #${prev.id} — inheriting min builds`);
+                explicitAndroid = explicitAndroid ?? prev.minAndroidBuild;
+                explicitIos = explicitIos ?? prev.minIosBuild;
+            } else {
+                const msgParts: string[] = [];
+                if (diff.added.length) msgParts.push(`+${diff.added.join(', ')}`);
+                if (diff.removed.length) msgParts.push(`-${diff.removed.join(', ')}`);
+                if (diff.changed.length) msgParts.push(`~${diff.changed.join(', ')}`);
+                warn(`native deps changed vs bundle #${prev.id}: ${msgParts.join(' · ')}`);
+                explicitAndroid = explicitAndroid ?? requireDetected(detectedAndroid, 'android');
+                explicitIos = explicitIos ?? requireDetected(detectedIos, 'ios');
+            }
+        }
+    } else {
+        explicitAndroid = explicitAndroid ?? requireDetected(detectedAndroid, 'android');
+        explicitIos = explicitIos ?? requireDetected(detectedIos, 'ios');
+    }
+
+    cfg.minAndroidBuild = explicitAndroid;
+    cfg.minIosBuild = explicitIos;
+    ok(`min_android_build: ${cfg.minAndroidBuild} · min_ios_build: ${cfg.minIosBuild}`);
+    const pkgCount = Object.keys(currentNativePkgs).length;
+    ok(`native packages: ${pkgCount === 0 ? '(none)' : `${pkgCount} tracked`}`);
+}
+
+function requireDetected(value: string | null, platform: 'android' | 'ios'): string {
+    if (!value) {
+        fail(
+            `could not detect native ${platform} version — pass --min-${platform}-build, set CAPGO_MIN_${platform.toUpperCase()}_BUILD, or point --${platform}-project at the native project root`
+        );
+    }
+    if (!parseSemver(value)) {
+        fail(`detected native ${platform} version "${value}" is not valid semver — pass --min-${platform}-build explicitly`);
+    }
+    return value;
+}
+
+function resolvePackageJsonPath(cfg: ResolvedConfig): string | null {
+    if (cfg.packageJson) {
+        return existsSync(cfg.packageJson) ? cfg.packageJson : null;
+    }
+    const cwdPkg = path.resolve(process.cwd(), 'package.json');
+    return existsSync(cwdPkg) ? cwdPkg : null;
+}
+
+async function fetchLastActiveBundle(cfg: ResolvedConfig): Promise<BundleRow | null> {
+    const ctx = { serverUrl: cfg.serverUrl!, adminToken: cfg.adminToken };
+    const qs = new URLSearchParams({ app_id: cfg.appId!, channel: cfg.channel, active: 'true' });
+    const list = await apiJson<BundleRow[]>(ctx, 'GET', `/admin/bundles?${qs.toString()}`);
+    return list[0] ?? null;
 }
 
 export async function validateDist(cfg: ResolvedConfig): Promise<void> {

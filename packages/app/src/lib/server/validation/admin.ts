@@ -37,6 +37,24 @@ export const AppCreateSchema = v.object({
     name: v.pipe(v.string(), v.minLength(1), v.maxLength(256), v.description('Display name.'), v.examples(['Notes']))
 });
 
+const NativeBuildInput = v.pipe(
+    v.string(),
+    v.minLength(1),
+    v.maxLength(64),
+    v.description(
+        'Minimum native-shell version required to run this bundle. Semver string (e.g. "1.4.0"). Compared against device.version_build on the matching platform.'
+    ),
+    v.examples(['1.4.0'])
+);
+
+const NativePackagesInput = v.pipe(
+    v.record(v.string(), v.string()),
+    v.description(
+        'Fingerprint of native-code dependencies (e.g. @capacitor/app) and their resolved versions at publish time.'
+    ),
+    v.examples([{ '@capacitor/app': '6.0.0' }])
+);
+
 export const BundleInitSchema = v.object({
     app_id: AppIdInput,
     version: VersionInput,
@@ -51,7 +69,45 @@ export const BundleInitSchema = v.object({
     ),
     session_key: v.optional(v.pipe(v.string(), v.description('Optional encryption session key.'))),
     link: v.optional(LinkInput),
-    comment: v.optional(CommentInput)
+    comment: v.optional(CommentInput),
+    min_android_build: NativeBuildInput,
+    min_ios_build: NativeBuildInput,
+    native_packages: NativePackagesInput
+});
+
+export const AppPatchSchema = v.object({
+    disable_auto_update: v.optional(
+        v.pipe(
+            v.picklist(['none', 'major', 'minor', 'patch'] as const),
+            v.description('Upgrade-class ceiling for /updates. "none" disables the guard.')
+        )
+    ),
+    disable_auto_update_under_native: v.optional(
+        v.pipe(
+            v.boolean(),
+            v.description(
+                'When true, /updates refuses to serve a bundle whose semver is lower than the device version_build.'
+            )
+        )
+    ),
+    min_plugin_version: v.optional(
+        v.nullable(
+            v.pipe(
+                v.string(),
+                v.minLength(1),
+                v.maxLength(64),
+                v.description(
+                    'Minimum @capgo/capacitor-updater plugin version the server will serve. Pass null to clear the floor.'
+                ),
+                v.examples(['6.25.0'])
+            )
+        )
+    ),
+    name: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256), v.description('Display name.')))
+});
+
+export const AppIdParamsSchema = v.object({
+    id: AppIdInput
 });
 
 export const BundleCommitSchema = v.object({

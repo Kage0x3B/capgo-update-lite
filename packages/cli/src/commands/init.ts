@@ -11,7 +11,12 @@ const TEMPLATE = {
     serverUrl: 'https://ota.example.com',
     channel: 'production',
     distDir: 'dist',
-    platforms: ['ios', 'android']
+    platforms: ['ios', 'android'],
+    // Let the CLI auto-detect native versions from android/ and ios/ and bump
+    // the per-bundle min builds whenever @capacitor/* deps change. Remove this
+    // line (or set to false) to pin min builds manually via minAndroidBuild /
+    // minIosBuild or --min-*-build flags.
+    autoMinUpdateBuild: true
 };
 
 export function registerInit(program: Command): void {

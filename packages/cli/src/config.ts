@@ -34,6 +34,11 @@ export type FileConfig = {
     skipPreflight?: boolean;
     dryRun?: boolean;
     codeCheck?: boolean;
+    minAndroidBuild?: string;
+    minIosBuild?: string;
+    autoMinUpdateBuild?: boolean;
+    androidProject?: string;
+    iosProject?: string;
 };
 
 export type ResolvedConfig = {
@@ -53,6 +58,13 @@ export type ResolvedConfig = {
     dryRun: boolean;
     codeCheck: boolean;
     versionExistsOk: boolean;
+    minAndroidBuild: string | undefined;
+    minIosBuild: string | undefined;
+    autoMinUpdateBuild: boolean;
+    androidProject: string;
+    iosProject: string;
+    // Populated by preflightNativeBuild; serialised into the /admin/bundles/init body.
+    nativePackages: Record<string, string> | undefined;
 };
 
 export type Requirement = 'serverUrl' | 'adminToken' | 'appId' | 'version' | 'distDir';
@@ -154,7 +166,17 @@ export async function resolveConfig(cmd: Command, requires: readonly Requirement
         dryRun: opts.dryRun === true || envBool('CAPGO_DRY_RUN') === true || file.dryRun === true,
         // commander's --no-code-check sets opts.codeCheck = false; default true.
         codeCheck: opts.codeCheck === false ? false : file.codeCheck !== false,
-        versionExistsOk: opts.versionExistsOk === true
+        versionExistsOk: opts.versionExistsOk === true,
+        minAndroidBuild: optStr(opts, 'minAndroidBuild') ?? envStr('CAPGO_MIN_ANDROID_BUILD') ?? file.minAndroidBuild,
+        minIosBuild: optStr(opts, 'minIosBuild') ?? envStr('CAPGO_MIN_IOS_BUILD') ?? file.minIosBuild,
+        autoMinUpdateBuild:
+            opts.autoMinUpdateBuild === true ||
+            envBool('CAPGO_AUTO_MIN_UPDATE_BUILD') === true ||
+            file.autoMinUpdateBuild === true,
+        androidProject:
+            optStr(opts, 'androidProject') ?? envStr('CAPGO_ANDROID_PROJECT') ?? file.androidProject ?? './android',
+        iosProject: optStr(opts, 'iosProject') ?? envStr('CAPGO_IOS_PROJECT') ?? file.iosProject ?? './ios',
+        nativePackages: undefined
     };
 
     for (const req of requires) {

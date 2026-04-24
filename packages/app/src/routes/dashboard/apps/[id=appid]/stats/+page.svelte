@@ -40,6 +40,12 @@
             >
                 Stats
             </span>
+            <a
+                href="/dashboard/apps/{appId}/settings"
+                class="text-surface-600-400 hover:text-surface-950-50 -mb-px border-b-2 border-transparent px-1 pb-2"
+            >
+                Settings
+            </a>
         </nav>
     </div>
     <TimeWindow bind:value={win} />

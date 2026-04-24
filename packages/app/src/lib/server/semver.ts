@@ -62,3 +62,34 @@ export function isNewer(candidate: string, running: string): boolean {
     if (!r) return true;
     return compareSemver(c, r) > 0;
 }
+
+/**
+ * Classifies the upgrade class between two semvers. Used by the per-app
+ * `disable_auto_update` ceiling on POST /updates. Mirrors upstream capgo's
+ * `getUpgradeKind` (utils/update.ts).
+ *
+ * Returns 'none' when candidate is not strictly greater than running. The
+ * callers of this function only care about blocked upgrades, so downgrades
+ * collapse into 'none' — the no-downgrade-under-native guard handles those.
+ */
+export type UpgradeClass = 'major' | 'minor' | 'patch' | 'none';
+
+export function upgradeClass(candidate: ParsedSemver, running: ParsedSemver): UpgradeClass {
+    if (compareSemver(candidate, running) <= 0) return 'none';
+    if (candidate.major !== running.major) return 'major';
+    if (candidate.minor !== running.minor) return 'minor';
+    if (candidate.patch !== running.patch) return 'patch';
+    // Same X.Y.Z but candidate > running implies prerelease promotion. Treat
+    // as 'patch' so it's caught by the most permissive guard level.
+    return 'patch';
+}
+
+/**
+ * True when the blocked class is met or exceeded. E.g. blocking 'minor' also
+ * blocks 'major'. 'none' never blocks.
+ */
+export function isUpgradeBlocked(actual: UpgradeClass, blocked: UpgradeClass): boolean {
+    if (blocked === 'none' || actual === 'none') return false;
+    const rank: Record<Exclude<UpgradeClass, 'none'>, number> = { patch: 1, minor: 2, major: 3 };
+    return rank[actual] >= rank[blocked];
+}

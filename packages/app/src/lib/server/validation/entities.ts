@@ -41,10 +41,34 @@ export const DeviceIdField = v.pipe(
 
 // --- entities ---------------------------------------------------------------
 
+export const DisableAutoUpdateField = v.pipe(
+    v.picklist(['none', 'major', 'minor', 'patch'] as const),
+    v.description(
+        'Upgrade-class ceiling. Bundles that would cause an upgrade at or above this class are withheld from /updates. "none" disables the guard.'
+    ),
+    v.examples(['none'])
+);
+
 export const AppSchema = v.pipe(
     v.object({
         id: AppIdField,
         name: v.pipe(v.string(), v.description('Display name.'), v.examples(['Notes'])),
+        disableAutoUpdate: DisableAutoUpdateField,
+        disableAutoUpdateUnderNative: v.pipe(
+            v.boolean(),
+            v.description(
+                'When true, /updates refuses to serve a bundle whose semver is lower than the device version_build.'
+            )
+        ),
+        minPluginVersion: v.nullable(
+            v.pipe(
+                v.string(),
+                v.description(
+                    'Minimum @capgo/capacitor-updater plugin version the server will serve. Null disables the floor.'
+                ),
+                v.examples(['6.25.0'])
+            )
+        ),
         createdAt: v.date()
     }),
     v.title('App'),
@@ -71,6 +95,27 @@ export const BundleSchema = v.pipe(
         sessionKey: v.pipe(v.string(), v.description('Optional encryption session key — empty string when none.')),
         link: v.nullable(v.pipe(v.string(), v.description('Release notes / changelog URL.'))),
         comment: v.nullable(v.pipe(v.string(), v.description('Operator-authored note.'))),
+        minAndroidBuild: v.pipe(
+            v.string(),
+            v.description(
+                'Minimum native Android versionName required to receive this bundle. Compared against device.version_build on platform=android.'
+            ),
+            v.examples(['1.4.0'])
+        ),
+        minIosBuild: v.pipe(
+            v.string(),
+            v.description(
+                'Minimum native iOS CFBundleShortVersionString required to receive this bundle. Compared against device.version_build on platform=ios.'
+            ),
+            v.examples(['1.4.0'])
+        ),
+        nativePackages: v.pipe(
+            v.record(v.string(), v.string()),
+            v.description(
+                'Fingerprint of native-code dependencies (e.g. @capacitor/app) with resolved versions at publish time. Drives the CLI\'s --auto-min-update-build decision.'
+            ),
+            v.examples([{ '@capacitor/app': '6.0.0', '@capacitor/haptics': '6.0.0' }])
+        ),
         active: v.pipe(v.boolean(), v.description('Whether this bundle currently resolves for its (app_id, channel).')),
         state: v.pipe(
             v.string(),
@@ -139,11 +184,18 @@ export const BundleDeleteResponseSchema = v.union([
 /** Error codes /updates can emit inside its always-200 body. */
 export const UPDATES_ERROR_CODES = [
     'invalid_request',
+    'invalid_version_build',
     'unsupported_plugin_version',
+    'no_app',
     'no_bundle',
     'no_new_version_available',
     'semver_error',
     'no_bundle_url',
+    'below_min_native_build',
+    'disable_auto_update_under_native',
+    'disable_auto_update_to_major',
+    'disable_auto_update_to_minor',
+    'disable_auto_update_to_patch',
     'server_misconfigured'
 ] as const;
 

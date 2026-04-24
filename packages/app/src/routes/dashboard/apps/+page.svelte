@@ -76,6 +76,11 @@
                     <tr>
                         <th>App id</th>
                         <th>Name</th>
+                        <th>Auto-update ceiling</th>
+                        <th title="Refuses OTA bundles older than device native">
+                            Under-native guard
+                        </th>
+                        <th>Min plugin</th>
                         <th>Created</th>
                         <th aria-label="actions"></th>
                     </tr>
@@ -85,10 +90,40 @@
                         <tr>
                             <td><code>{app.id}</code></td>
                             <td>{app.name}</td>
+                            <td>
+                                {#if app.disableAutoUpdate === 'none'}
+                                    <span class="text-surface-600-400">—</span>
+                                {:else if app.disableAutoUpdate === 'major'}
+                                    <span class="badge preset-tonal-warning">major</span>
+                                {:else if app.disableAutoUpdate === 'minor'}
+                                    <span class="badge preset-tonal-error">minor</span>
+                                {:else}
+                                    <span class="badge preset-tonal-error">patch</span>
+                                {/if}
+                            </td>
+                            <td>
+                                {#if app.disableAutoUpdateUnderNative}
+                                    <span title="On — older OTA bundles are refused">🛡️</span>
+                                {:else}
+                                    <span title="Off — older OTA bundles can downgrade native"
+                                        >⚠️</span
+                                    >
+                                {/if}
+                            </td>
+                            <td>
+                                {#if app.minPluginVersion}
+                                    <code class="text-xs">{app.minPluginVersion}</code>
+                                {:else}
+                                    <span class="text-surface-600-400">—</span>
+                                {/if}
+                            </td>
                             <td class="text-surface-600-400">{fmtDate(app.createdAt)}</td>
                             <td class="space-x-3 text-right whitespace-nowrap">
                                 <a class="anchor" href="/dashboard/apps/{app.id}">Bundles</a>
                                 <a class="anchor" href="/dashboard/apps/{app.id}/stats">Stats</a>
+                                <a class="anchor" href="/dashboard/apps/{app.id}/settings"
+                                    >Settings</a
+                                >
                             </td>
                         </tr>
                     {/each}

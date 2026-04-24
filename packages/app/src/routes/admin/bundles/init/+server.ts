@@ -22,7 +22,10 @@ export const POST = defineRoute(
                 channel: 'production',
                 platforms: ['ios', 'android'],
                 link: 'https://example.com/notes/1.4.2',
-                comment: 'Fixes crash on empty note save.'
+                comment: 'Fixes crash on empty note save.',
+                min_android_build: '1.4.0',
+                min_ios_build: '1.4.0',
+                native_packages: { '@capacitor/app': '6.0.0' }
             },
             response: {
                 bundle_id: 42,
