@@ -1,17 +1,25 @@
 /**
- * Minimal semver helpers.
+ * Minimal native-app version helpers.
  *
  * We only need:
- *  - parse: is this a syntactically valid semver?
- *  - compare: strict greater-than between two semvers
+ *  - parse: is this a syntactically valid version?
+ *  - compare: strict greater-than between two versions
  *  - isNewer: does the server's candidate version supersede what the device runs?
+ *
+ * Strict semver requires X.Y.Z, but Apple's `CFBundleShortVersionString`
+ * allows MAJOR[.MINOR[.PATCH]] (so `110`, `110.0`, and `110.0.0` are all
+ * valid Apple versions) and Google Play's `versionName` is even looser. To
+ * accept what these platforms actually ship, we treat missing minor/patch
+ * as 0. The pre-release suffix is still parsed for ordering.
  *
  * `version_name` from the plugin carries two special sentinels — 'builtin'
  * (no JS bundle applied yet) and 'unknown' (a prior bundle failed). Both are
- * treated as "always update" and never parsed as semver.
+ * treated as "always update" and never parsed as a version.
+ *
+ * Mirrors `packages/cli/src/semver.ts` — keep the two in sync.
  */
 
-const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-.]+))?(?:\+([0-9A-Za-z-.]+))?$/;
+const SEMVER_RE = /^(\d+)(?:\.(\d+)(?:\.(\d+))?)?(?:-([0-9A-Za-z-.]+))?(?:\+([0-9A-Za-z-.]+))?$/;
 
 export type ParsedSemver = {
     major: number;
@@ -25,8 +33,8 @@ export function parseSemver(input: string): ParsedSemver | null {
     if (!m) return null;
     return {
         major: Number(m[1]),
-        minor: Number(m[2]),
-        patch: Number(m[3]),
+        minor: m[2] !== undefined ? Number(m[2]) : 0,
+        patch: m[3] !== undefined ? Number(m[3]) : 0,
         prerelease: m[4] ?? null
     };
 }

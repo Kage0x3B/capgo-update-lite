@@ -47,7 +47,9 @@ describe('initBundle — pre-DB validation', () => {
     });
 
     it('rejects non-semver min_ios_build', async () => {
-        const input = makeInput({ min_ios_build: '1' });
+        // Apple allows X[.Y[.Z]] (e.g. "110.0"), so use a value that's not
+        // numeric at all to keep this assertion targeted at the validator.
+        const input = makeInput({ min_ios_build: 'not-a-version' });
         await expect(initBundle(dbStubThatMustNotBeCalled(), {} as never, input)).rejects.toSatisfy(
             (e: unknown) => e instanceof ApiError && e.code === 'invalid_request' && /min_ios_build/.test(e.message)
         );

@@ -28,22 +28,33 @@ describe('parseSemver', () => {
         ['1.0.0-alpha', { major: 1, minor: 0, patch: 0, prerelease: 'alpha' }],
         ['1.0.0-alpha.1', { major: 1, minor: 0, patch: 0, prerelease: 'alpha.1' }],
         ['1.0.0+build', { major: 1, minor: 0, patch: 0, prerelease: null }],
-        ['1.0.0-rc.1+build.42', { major: 1, minor: 0, patch: 0, prerelease: 'rc.1' }]
+        ['1.0.0-rc.1+build.42', { major: 1, minor: 0, patch: 0, prerelease: 'rc.1' }],
+        // Apple allows X[.Y[.Z]] in CFBundleShortVersionString — missing
+        // segments default to 0 so ordering stays well-defined.
+        ['110', { major: 110, minor: 0, patch: 0, prerelease: null }],
+        ['110.0', { major: 110, minor: 0, patch: 0, prerelease: null }],
+        ['1.2', { major: 1, minor: 2, patch: 0, prerelease: null }]
     ])('parses %s', (input, expected) => {
         expect(parseSemver(input)).toEqual(expected);
     });
 
-    it.each(['1', '1.2', 'v1.2.3', '1.2.3.4', '', ' ', 'latest'])('rejects %s', (input) => {
+    it.each(['v1.2.3', '1.2.3.4', '', ' ', 'latest'])('rejects %s', (input) => {
         expect(parseSemver(input)).toBeNull();
     });
 });
 
 describe('isValidSemver', () => {
-    it('true for valid semver', () => {
+    it('true for X.Y.Z', () => {
         expect(isValidSemver('1.2.3')).toBe(true);
     });
-    it('false for invalid', () => {
-        expect(isValidSemver('1.2')).toBe(false);
+    it('true for Apple-style X.Y', () => {
+        expect(isValidSemver('1.2')).toBe(true);
+    });
+    it('true for bare integer', () => {
+        expect(isValidSemver('110')).toBe(true);
+    });
+    it('false for non-numeric', () => {
+        expect(isValidSemver('latest')).toBe(false);
     });
 });
 

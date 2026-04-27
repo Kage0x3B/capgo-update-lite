@@ -1,6 +1,10 @@
 import * as v from 'valibot';
 
-const REVERSE_DOMAIN = /^[a-z0-9]+(\.[\w-]+)+$/i;
+// Strict reverse-domain — what both Apple's CFBundleIdentifier and Android's
+// applicationId accept simultaneously. Lowercase letters/digits/underscore/hyphen,
+// each segment must start with a letter, ≥2 dot-separated segments. Mirrors
+// packages/cli/src/validators.ts → REVERSE_DOMAIN_RE.
+const REVERSE_DOMAIN = /^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$/;
 const PLATFORM = v.pipe(v.picklist(['ios', 'android', 'electron'] as const), v.description('Target platform.'));
 
 const AppIdInput = v.pipe(
@@ -42,9 +46,9 @@ const NativeBuildInput = v.pipe(
     v.minLength(1),
     v.maxLength(64),
     v.description(
-        'Minimum native-shell version required to run this bundle. Semver string (e.g. "1.4.0"). Compared against device.version_build on the matching platform.'
+        'Minimum native-shell version required to run this bundle. Accepts X[.Y[.Z]] (Apple\'s CFBundleShortVersionString format — "110", "110.0", and "110.0.0" all work). Compared against device.version_build on the matching platform.'
     ),
-    v.examples(['1.4.0'])
+    v.examples(['1.4.0', '110.0'])
 );
 
 const NativePackagesInput = v.pipe(

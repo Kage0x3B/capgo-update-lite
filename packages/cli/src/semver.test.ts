@@ -8,24 +8,34 @@ import { cmpSemver, parseSemver, type Semver } from './semver.js';
 
 describe('parseSemver', () => {
     it.each([
-        ['1.2.3', { major: 1, minor: 2, patch: 3 }],
-        ['10.20.30', { major: 10, minor: 20, patch: 30 }],
-        ['0.0.0', { major: 0, minor: 0, patch: 0 }],
-        ['1.0.0-alpha', { major: 1, minor: 0, patch: 0 }],
-        ['1.0.0-alpha.1', { major: 1, minor: 0, patch: 0 }],
-        ['1.0.0+build', { major: 1, minor: 0, patch: 0 }],
-        ['1.0.0-rc.1+build.42', { major: 1, minor: 0, patch: 0 }]
+        ['1.2.3', { major: 1, minor: 2, patch: 3, prerelease: null }],
+        ['10.20.30', { major: 10, minor: 20, patch: 30, prerelease: null }],
+        ['0.0.0', { major: 0, minor: 0, patch: 0, prerelease: null }],
+        ['1.0.0-alpha', { major: 1, minor: 0, patch: 0, prerelease: 'alpha' }],
+        ['1.0.0-alpha.1', { major: 1, minor: 0, patch: 0, prerelease: 'alpha.1' }],
+        ['1.0.0+build', { major: 1, minor: 0, patch: 0, prerelease: null }],
+        ['1.0.0-rc.1+build.42', { major: 1, minor: 0, patch: 0, prerelease: 'rc.1' }],
+        // Apple allows X[.Y[.Z]] in CFBundleShortVersionString — missing
+        // segments default to 0 so ordering stays well-defined.
+        ['110', { major: 110, minor: 0, patch: 0, prerelease: null }],
+        ['110.0', { major: 110, minor: 0, patch: 0, prerelease: null }],
+        ['1.2', { major: 1, minor: 2, patch: 0, prerelease: null }]
     ])('parses %s', (input, expected) => {
         expect(parseSemver(input)).toEqual(expected);
     });
 
-    it.each(['1', '1.2', 'v1.2.3', '1.2.3.4', '', ' ', '1.2.x', 'latest'])('rejects %s', (input) => {
+    it.each(['v1.2.3', '1.2.3.4', '', ' ', '1.2.x', 'latest'])('rejects %s', (input) => {
         expect(parseSemver(input)).toBeNull();
     });
 });
 
 describe('cmpSemver', () => {
-    const sv = (major: number, minor: number, patch: number): Semver => ({ major, minor, patch });
+    const sv = (major: number, minor: number, patch: number, prerelease: string | null = null): Semver => ({
+        major,
+        minor,
+        patch,
+        prerelease
+    });
 
     it('returns positive when a > b', () => {
         expect(cmpSemver(sv(1, 2, 4), sv(1, 2, 3))).toBeGreaterThan(0);
