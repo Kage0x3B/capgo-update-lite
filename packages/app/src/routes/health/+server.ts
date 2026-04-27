@@ -3,6 +3,8 @@ import { sql } from 'drizzle-orm';
 import * as v from 'valibot';
 import { defineRoute } from '$lib/server/defineRoute.js';
 import { ping as pingR2 } from '$lib/server/r2.js';
+// Inlined at build time by Vite — keeps the runtime free of any FS access.
+import { version as SERVER_VERSION } from '../../../package.json';
 
 const HealthCheckSchema = v.pipe(
     v.object({
@@ -19,6 +21,12 @@ const HealthResponseSchema = v.pipe(
         status: v.pipe(
             v.picklist(['ok', 'degraded'] as const),
             v.description('`ok` when every check passed, `degraded` when any failed.')
+        ),
+        version: v.pipe(
+            v.string(),
+            v.description(
+                'Server build version (semver). Clients can compare against their own minimum compatible version.'
+            )
         ),
         checks: v.array(HealthCheckSchema)
     }),
@@ -68,7 +76,11 @@ export const GET = defineRoute(
         const checks = [dbCheck, r2Check];
         const healthy = checks.every((c) => c.ok);
         return json(
-            { status: healthy ? ('ok' as const) : ('degraded' as const), checks },
+            {
+                status: healthy ? ('ok' as const) : ('degraded' as const),
+                version: SERVER_VERSION,
+                checks
+            },
             { status: healthy ? 200 : 503 }
         );
     }
