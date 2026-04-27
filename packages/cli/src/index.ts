@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * capgo-update: CLI for a capgo-update-lite OTA server.
+ * capgo-update-lite: CLI for a capgo-update-lite OTA server.
  *
  * Global options (--server-url, --admin-token, --config) cascade into every
  * subcommand via Command#optsWithGlobals(). Precedence everywhere:
@@ -49,7 +49,10 @@ async function main(): Promise<void> {
     const pkg = await readPackageJson();
     const program = new Command();
     program
-        .name('capgo-update')
+        // Must match the `bin` entry in package.json — @bomb.sh/tab keys the
+        // generated completion script on this name, so a mismatch means TAB
+        // never fires (zsh's #compdef line wouldn't match what the user typed).
+        .name('capgo-update-lite')
         .description('CLI for a capgo-update-lite OTA server.')
         .version(pkg.version, '-V, --version', 'print CLI version')
         .option('--server-url <url>', 'OTA server base URL (env CAPGO_SERVER_URL)')
