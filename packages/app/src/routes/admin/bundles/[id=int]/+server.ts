@@ -1,7 +1,22 @@
 import { defineRoute } from '$lib/server/defineRoute.js';
 import { BundleDeleteQuerySchema, BundleIdParamsSchema, BundlePatchSchema } from '$lib/server/validation/admin.js';
 import { BundleDeleteResponseSchema, BundleSchema } from '$lib/server/validation/entities.js';
-import { deleteBundle, patchBundle } from '$lib/server/services/bundles.js';
+import { deleteBundle, getBundle, patchBundle } from '$lib/server/services/bundles.js';
+
+export const GET = defineRoute(
+    {
+        auth: 'admin',
+        params: BundleIdParamsSchema,
+        response: BundleSchema,
+        meta: {
+            operationId: 'getBundle',
+            summary: 'Fetch a single bundle',
+            description: 'Returns one bundle row including native package fingerprint and R2 key.',
+            tags: ['admin']
+        }
+    },
+    async ({ params, db }) => getBundle(db, params.id)
+);
 
 export const PATCH = defineRoute(
     {

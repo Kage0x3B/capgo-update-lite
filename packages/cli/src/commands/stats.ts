@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import { apiJson, type StatsEventRow } from '../api.js';
 import { resolveConfig } from '../config.js';
-import { printJson, table } from '../output.js';
+import { done, enterJsonMode, printJson, start, table } from '../output.js';
 
 export function registerStats(program: Command): void {
     program
@@ -15,7 +15,6 @@ export function registerStats(program: Command): void {
         .option('--offset <n>', 'Skip rows (pagination)')
         .option('--json', 'Output raw JSON instead of a table')
         .action(async function action(this: Command): Promise<void> {
-            const cfg = await resolveConfig(this, ['serverUrl', 'adminToken']);
             const opts = this.opts<{
                 app?: string;
                 action?: string;
@@ -25,6 +24,8 @@ export function registerStats(program: Command): void {
                 offset?: string;
                 json?: boolean;
             }>();
+            if (opts.json) enterJsonMode();
+            const cfg = await resolveConfig(this, ['serverUrl', 'adminToken']);
             const qs = new URLSearchParams();
             if (opts.app) qs.set('app_id', opts.app);
             if (opts.action) qs.set('action', opts.action);
@@ -42,6 +43,7 @@ export function registerStats(program: Command): void {
                 printJson(rows);
                 return;
             }
+            start('capgo-update-lite stats');
             table(
                 ['RECEIVED', 'APP', 'DEVICE', 'ACTION', 'PLATFORM', 'VERSION'],
                 rows.map((r) => [
@@ -53,5 +55,6 @@ export function registerStats(program: Command): void {
                     r.versionName ?? '-'
                 ])
             );
+            done(`${rows.length} event${rows.length === 1 ? '' : 's'}`);
         });
 }

@@ -1,10 +1,9 @@
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { Command } from 'commander';
 import { PLATFORMS, type Platform, type PluginError, type UpdateAvailable, type UpdatesResponse } from '../api.js';
+import { readAppIdFromCapacitorConfig } from '../capacitor-config.js';
 import { resolveConfig } from '../config.js';
-import { done, fail, kv, step, warn } from '../output.js';
+import { done, fail, kv, start, step, warn } from '../output.js';
+import { appIdError, isUuidLike } from '../validators.js';
 
 const FAKE_DEVICE_ID = '00000000-0000-0000-0000-000000000001';
 const DEFAULT_PLUGIN_VERSION = '7.4.0';
@@ -17,9 +16,21 @@ export function registerProbe(program: Command): void {
         .option('--platform <p>', `One of: ${PLATFORMS.join(', ')} (default: ios)`)
         .option(
             '--current-version <semver>',
-            'Version the synthetic device claims to be running (default: 0.0.0 — forces update-available)'
+            'Bundle (JS) version the synthetic device claims to be running (default: 0.0.0 — forces update-available)'
+        )
+        .option(
+            '--native-version <semver>',
+            'Native shell version (versionName / CFBundleShortVersionString). Defaults to --current-version, which simulates a fresh install'
         )
         .option('--device-id <uuid>', `Device UUID (default: ${FAKE_DEVICE_ID})`)
+        .option(
+            '--plugin-version <semver>',
+            `@capgo/capacitor-updater version on the synthetic device (default: ${DEFAULT_PLUGIN_VERSION})`
+        )
+        .option('--emulator', 'Mark the device as an emulator/simulator (default: off)')
+        .option('--no-emulator', 'Mark the device as physical (default)')
+        .option('--prod', 'Mark the build as a release/prod build (default)')
+        .option('--no-prod', 'Mark the build as a debug build')
         .option('-c, --channel <name>', 'Channel override sent as defaultChannel')
         .action(async function action(this: Command): Promise<void> {
             const cfg = await resolveConfig(this, ['serverUrl']);
@@ -27,44 +38,64 @@ export function registerProbe(program: Command): void {
                 app?: string;
                 platform?: string;
                 currentVersion?: string;
+                nativeVersion?: string;
                 deviceId?: string;
+                pluginVersion?: string;
+                emulator?: boolean;
+                prod?: boolean;
                 channel?: string;
             }>();
 
             let appId = opts.app ?? cfg.appId;
             if (!appId) {
                 const fromConfig = await readAppIdFromCapacitorConfig();
-                if (fromConfig) appId = fromConfig;
+                if (fromConfig) appId = fromConfig.appId;
             }
             if (!appId) {
                 fail('could not resolve app id — pass --app, set "appId" in config, or run inside a Capacitor project');
             }
+            const appErr = appIdError(appId);
+            if (appErr) fail(appErr);
 
             const platform = (opts.platform ?? 'ios') as Platform;
             if (!PLATFORMS.includes(platform)) {
                 fail(`invalid platform "${platform}" (expected one of ${PLATFORMS.join(', ')})`);
             }
             const deviceId = opts.deviceId ?? FAKE_DEVICE_ID;
+            if (!isUuidLike(deviceId)) {
+                fail(`--device-id "${deviceId}" is not a UUID (expected 8-4-4-4-12 hex)`);
+            }
             const versionName = opts.currentVersion ?? '0.0.0';
+            const versionBuild = opts.nativeVersion ?? versionName;
+            const pluginVersion = opts.pluginVersion ?? DEFAULT_PLUGIN_VERSION;
+            // Commander stores --foo / --no-foo on the same key (boolean). When
+            // neither is passed, the key is undefined → fall back to default.
+            const isEmulator = opts.emulator === true;
+            const isProd = opts.prod !== false;
             const defaultChannel = opts.channel ?? cfg.channel;
 
             const body = {
                 app_id: appId,
                 device_id: deviceId,
                 version_name: versionName,
-                version_build: versionName,
-                is_emulator: false,
-                is_prod: true,
+                version_build: versionBuild,
+                is_emulator: isEmulator,
+                is_prod: isProd,
                 platform,
-                plugin_version: DEFAULT_PLUGIN_VERSION,
+                plugin_version: pluginVersion,
                 defaultChannel
             };
 
+            start('capgo-update-lite probe');
             step(`POST ${cfg.serverUrl}/updates`);
             kv('app_id', appId);
             kv('device_id', deviceId);
             kv('platform', platform);
             kv('version_name', versionName);
+            kv('version_build', versionBuild);
+            kv('plugin_version', pluginVersion);
+            kv('is_emulator', String(isEmulator));
+            kv('is_prod', String(isProd));
             kv('defaultChannel', defaultChannel);
 
             const res = await fetch(`${cfg.serverUrl}/updates`, {
@@ -81,6 +112,7 @@ export function registerProbe(program: Command): void {
                 kv('error', err.error);
                 kv('message', err.message);
                 warn(`server returned "${err.error}" — plugin would receive no update`);
+                done('No update available');
                 return;
             }
             const upd = data as UpdateAvailable;
@@ -91,19 +123,4 @@ export function registerProbe(program: Command): void {
             kv('url', upd.url.length > 80 ? `${upd.url.slice(0, 77)}...` : upd.url);
             done(`Update available — plugin would install ${upd.version}`);
         });
-}
-
-async function readAppIdFromCapacitorConfig(): Promise<string | null> {
-    for (const f of ['capacitor.config.ts', 'capacitor.config.js', 'capacitor.config.json']) {
-        const p = path.resolve(process.cwd(), f);
-        if (!existsSync(p)) continue;
-        try {
-            const raw = await readFile(p, 'utf8');
-            const m = raw.match(/appId\s*:\s*['"`]([^'"`]+)['"`]/);
-            if (m) return m[1];
-        } catch {
-            // fall through
-        }
-    }
-    return null;
 }
