@@ -34,8 +34,17 @@ vi.mock('./api.js', async () => {
     };
 });
 
+// The prompt module reaches for stdin TTY state; in unit tests we never want
+// to actually prompt, so isInteractive() is forced false. Bump scenarios that
+// exercise the prompt path are covered by manual smoke testing.
+vi.mock('./prompt.js', () => ({
+    isInteractive: () => false,
+    selectBumpLevel: vi.fn(),
+    confirmBump: vi.fn()
+}));
+
 // Dynamic import after mocks are registered. vi.mock is hoisted so this works.
-const { preflightNativeBuild } = await import('./preflight.js');
+const { preflightNativeBuild, preflightVersionAutoresolve } = await import('./preflight.js');
 
 // ---- fixture helpers ----
 let tmp: string;
@@ -96,6 +105,7 @@ function makeCfg(overrides: Partial<ResolvedConfig> = {}): ResolvedConfig {
         autoMinUpdateBuild: false,
         androidProject: './android',
         iosProject: './ios',
+        sessionKey: undefined,
         nativePackages: undefined,
         ...overrides
     };
@@ -275,5 +285,89 @@ describe('preflightNativeBuild — auto mode (--auto-min-update-build)', () => {
         expect(cfg.minAndroidBuild).toBe('9.9.9');
         // iOS still inherits because no flag was set.
         expect(cfg.minIosBuild).toBe('0.5.0');
+    });
+});
+
+describe('preflightVersionAutoresolve', () => {
+    async function writeRootPackageJson(version: string | null): Promise<void> {
+        const body = version === null ? { name: 'x' } : { name: 'x', version };
+        await writeFile(path.join(tmp, 'package.json'), JSON.stringify(body, null, 2));
+    }
+
+    it('keeps an explicit cfg.version unchanged when no active bundle exists', async () => {
+        // No previous active bundle on this channel ⇒ list returns [].
+        mockBundleList([]);
+        const cfg = makeCfg({ version: '1.5.0' });
+        const outcome = await preflightVersionAutoresolve(cfg);
+        expect(outcome.kind).toBe('explicit');
+        expect(cfg.version).toBe('1.5.0');
+    });
+
+    it('reads version from package.json when none is provided', async () => {
+        await writeRootPackageJson('2.4.7');
+        mockBundleList([]);
+        const cfg = makeCfg({ version: undefined });
+        const outcome = await preflightVersionAutoresolve(cfg);
+        expect(outcome.kind).toBe('fromPackageJson');
+        expect(cfg.version).toBe('2.4.7');
+    });
+
+    it('fails fast when no version is provided and no package.json exists', async () => {
+        const cfg = makeCfg({ version: undefined });
+        await expect(preflightVersionAutoresolve(cfg)).rejects.toThrow(/missing version/);
+    });
+
+    it('rejects an explicit non-semver version', async () => {
+        const cfg = makeCfg({ version: 'not-a-version' });
+        await expect(preflightVersionAutoresolve(cfg)).rejects.toThrow(/not valid semver/);
+    });
+
+    it('rejects when package.json version is not parseable', async () => {
+        await writeRootPackageJson('not-a-version');
+        const cfg = makeCfg({ version: undefined });
+        await expect(preflightVersionAutoresolve(cfg)).rejects.toThrow(/not valid semver/);
+    });
+
+    it('passes through when target is strictly newer than the active bundle', async () => {
+        mockBundleList([bundleRow({ version: '1.4.0' })]);
+        const cfg = makeCfg({ version: '1.5.0' });
+        const outcome = await preflightVersionAutoresolve(cfg);
+        expect(outcome.kind).toBe('explicit');
+        expect(cfg.version).toBe('1.5.0');
+    });
+
+    it('fails when the explicit version would downgrade the active bundle', async () => {
+        mockBundleList([bundleRow({ version: '1.5.0' })]);
+        const cfg = makeCfg({ version: '1.4.0' });
+        await expect(preflightVersionAutoresolve(cfg)).rejects.toThrow(/downgrade/);
+    });
+
+    it('fails when an explicit version equals the active bundle (no prompt)', async () => {
+        mockBundleList([bundleRow({ version: '1.5.0' })]);
+        const cfg = makeCfg({ version: '1.5.0' });
+        await expect(preflightVersionAutoresolve(cfg)).rejects.toThrow(/already active/);
+    });
+
+    it('falls through on equal version when --version-exists-ok is set', async () => {
+        mockBundleList([bundleRow({ version: '1.5.0' })]);
+        const cfg = makeCfg({ version: '1.5.0', versionExistsOk: true });
+        // Should NOT throw — preflightAppRegistered handles the early-exit.
+        const outcome = await preflightVersionAutoresolve(cfg);
+        expect(outcome.kind).toBe('explicit');
+    });
+
+    it('refuses to prompt for a bump in non-interactive contexts (sourced)', async () => {
+        await writeRootPackageJson('1.5.0');
+        mockBundleList([bundleRow({ version: '1.5.0' })]);
+        const cfg = makeCfg({ version: undefined });
+        await expect(preflightVersionAutoresolve(cfg)).rejects.toThrow(/non-interactive/);
+    });
+
+    it('skips the active-bundle compare when no admin token is available', async () => {
+        // No mockBundleList — apiJsonMock would throw if called.
+        const cfg = makeCfg({ version: '1.5.0', adminToken: undefined });
+        const outcome = await preflightVersionAutoresolve(cfg);
+        expect(outcome.kind).toBe('explicit');
+        expect(apiJsonMock).not.toHaveBeenCalled();
     });
 });

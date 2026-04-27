@@ -1,23 +1,28 @@
 /**
- * `publish`: zip <dist-dir> → /admin/bundles/init → PUT R2 → /admin/bundles/commit.
+ * `publish`: zip the dist directory → /admin/bundles/init → PUT R2 → /admin/bundles/commit.
  *
- * All three positionals are interchangeable with flags / env / config file —
- * the user picks the route that suits the environment.
+ * All inputs come from flags / env / config / package.json — there are no
+ * positional arguments. The committed `capgo-update.config.json` typically supplies
+ * appId / serverUrl / distDir, the bundle version is sourced from
+ * package.json, and the admin token from the env.
  */
 
 import type { Command } from 'commander';
 import { apiCall, apiJson, type BundleInitResponse, type BundleRow } from '../api.js';
 import { resolveConfig } from '../config.js';
-import { done, fail, kv, ok, step, warn } from '../output.js';
+import { done, fail, kv, ok, spinner, start, step, warn } from '../output.js';
 import {
     preflightAppRegistered,
     preflightCapacitorConfig,
     preflightNativeBuild,
     preflightPackageJson,
     preflightServerPing,
+    preflightVersionAutoresolve,
     validateDist
 } from '../preflight.js';
+import { completionCache } from '../completion.js';
 import { parseSemver } from '../semver.js';
+import { appIdError } from '../validators.js';
 import { sha256Hex, verifyZipIntegrity, zipDir } from '../zip.js';
 
 const MIN_ZIP_BYTES = 1024;
@@ -28,15 +33,12 @@ export function registerPublish(program: Command): void {
     program
         .command('publish')
         .description('Zip a dist directory and publish it as a new OTA bundle.')
-        .argument('[app-id]', 'Reverse-domain app identifier (e.g. com.example.app)')
-        .argument('[version]', 'Semver string for the bundle (e.g. 1.4.2)')
-        .argument('[dist-dir]', 'Path to built web bundle (must contain index.html)')
-        .option('--app-id <id>', 'Override positional <app-id>')
+        .option('--app-id <id>', 'Reverse-domain app identifier (e.g. com.example.app)')
         .option(
             '--bundle-version <semver>',
-            'Override positional <version>. Named to avoid collision with the root --version flag.'
+            'Bundle version (defaults to package.json version). Named to avoid commander\'s root --version flag.'
         )
-        .option('--dist-dir <path>', 'Override positional <dist-dir>')
+        .option('--dist-dir <path>', 'Path to built web bundle (must contain index.html)')
         .option('-c, --channel <name>', 'Release channel (default: production)')
         .option('-p, --platforms <list>', 'Comma-separated: ios,android,electron')
         .option('--link <url>', 'Release notes / changelog URL')
@@ -57,30 +59,30 @@ export function registerPublish(program: Command): void {
         )
         .option('--android-project <path>', 'Path to Android project root (default: ./android)')
         .option('--ios-project <path>', 'Path to iOS project root (default: ./ios)')
-        .action(async function action(
-            this: Command,
-            appIdArg: string | undefined,
-            versionArg: string | undefined,
-            distDirArg: string | undefined
-        ): Promise<void> {
-            // Positionals feed the same opts bag resolveConfig reads from — one
-            // source of truth keeps the CLI > env > file > default ladder intact.
+        .option(
+            '--session-key <key>',
+            'Encryption session key (forwarded to the bundle row; the CLI does not encrypt the zip itself)'
+        )
+        .action(async function action(this: Command): Promise<void> {
+            // --bundle-version exists because commander reserves --version at the
+            // root level. We bridge it into resolveConfig's `version` slot here
+            // so the CLI > env > file > default ladder works uniformly.
             const opts = this.opts<Record<string, unknown>>();
-            if (appIdArg && !opts.appId) opts.appId = appIdArg;
-            if (versionArg && !opts.version) opts.version = versionArg;
-            if (distDirArg && !opts.distDir) opts.distDir = distDirArg;
-            // --version collides with the root CLI's built-in version flag (commander parses it at root level
-            // before dispatching to the subcommand). --bundle-version is the scripted override.
             if (!opts.version && typeof opts.bundleVersion === 'string') opts.version = opts.bundleVersion;
 
-            const cfg = await resolveConfig(this, ['serverUrl', 'appId', 'version', 'distDir']);
+            const cfg = await resolveConfig(this, ['serverUrl', 'appId', 'distDir']);
+            const appErr = appIdError(cfg.appId);
+            if (appErr) fail(appErr);
             if (!cfg.adminToken && !cfg.dryRun) {
                 fail('missing admin token (--admin-token, CAPGO_ADMIN_TOKEN, or "adminToken" in config — or use --dry-run)');
             }
 
-            step(`Preflight checks${cfg.dryRun ? ' (dry-run)' : ''}`);
-            const target = parseSemver(cfg.version!);
-            if (!target) fail(`version "${cfg.version}" is not valid semver`);
+            start(cfg.dryRun ? 'capgo-update-lite publish (dry-run)' : 'capgo-update-lite publish');
+            step('Preflight checks');
+            // Autoresolve runs first because it may bump the version via an
+            // interactive prompt before any other check sees cfg.version.
+            await preflightVersionAutoresolve(cfg);
+            const target = parseSemver(cfg.version!)!;
             ok(`target: ${cfg.appId}@${cfg.version} · channel: ${cfg.channel}`);
 
             if (cfg.skipPreflight) {
@@ -134,6 +136,7 @@ export function registerPublish(program: Command): void {
             if (cfg.platforms) initPayload.platforms = cfg.platforms;
             if (cfg.link) initPayload.link = cfg.link;
             if (cfg.comment) initPayload.comment = cfg.comment;
+            if (cfg.sessionKey) initPayload.session_key = cfg.sessionKey;
 
             if (cfg.dryRun) {
                 step('[dry-run] would publish:');
@@ -148,35 +151,51 @@ export function registerPublish(program: Command): void {
 
             const ctx = { serverUrl: cfg.serverUrl!, adminToken: cfg.adminToken };
 
-            step(`POST ${cfg.serverUrl}/admin/bundles/init`);
+            const initSpinner = spinner();
+            initSpinner.start(`POST ${cfg.serverUrl}/admin/bundles/init`);
             const initResult = await apiCall<BundleInitResponse>(ctx, 'POST', '/admin/bundles/init', initPayload);
             if (!initResult.ok) {
                 if (initResult.status === 409 && cfg.versionExistsOk) {
-                    warn('init returned 409 (duplicate) — exiting 0 per --version-exists-ok');
+                    initSpinner.cancel('init returned 409 (duplicate)');
+                    warn('exiting 0 per --version-exists-ok');
                     done(`Skipped ${cfg.appId}@${cfg.version} (already present)`);
                     return;
                 }
+                initSpinner.error('init failed');
                 fail(`POST /admin/bundles/init → ${initResult.status}: ${initResult.body}`);
             }
             const init = initResult.data;
-            ok(`bundle_id: ${init.bundle_id} · r2_key: ${init.r2_key}`);
+            initSpinner.stop(`bundle_id: ${init.bundle_id} · r2_key: ${init.r2_key}`);
 
-            step('PUT presigned R2 upload');
+            const uploadSpinner = spinner();
+            uploadSpinner.start(`Uploading ${sizeMb} MB to R2`);
             const putRes = await fetch(init.upload_url, {
                 method: 'PUT',
                 body: zipped,
                 headers: { 'content-type': 'application/zip' }
             });
-            if (!putRes.ok) fail(`R2 PUT failed: ${putRes.status} ${await putRes.text()}`);
+            if (!putRes.ok) {
+                uploadSpinner.error('upload failed');
+                fail(`R2 PUT failed: ${putRes.status} ${await putRes.text()}`);
+            }
+            uploadSpinner.stop(`Uploaded ${sizeMb} MB to R2`);
 
-            step(`POST ${cfg.serverUrl}/admin/bundles/commit`);
+            const commitSpinner = spinner();
+            commitSpinner.start(`POST ${cfg.serverUrl}/admin/bundles/commit`);
             const bundle = await apiJson<BundleRow>(ctx, 'POST', '/admin/bundles/commit', {
                 bundle_id: init.bundle_id,
                 checksum,
                 activate: cfg.activate
             });
+            commitSpinner.stop(`state: ${bundle.state} · active: ${bundle.active} · bundle_id: ${bundle.id}`);
+
+            // Best-effort completion-cache refresh so the next TAB sees the
+            // new bundle. Errors here never block the user-facing publish.
+            await Promise.allSettled([
+                completionCache.invalidateBundlesFor(cfg.appId!, cfg.channel),
+                completionCache.invalidateApps()
+            ]);
 
             done(`Published ${cfg.appId}@${cfg.version} to channel "${bundle.channel}"`);
-            ok(`state: ${bundle.state} · active: ${bundle.active} · bundle_id: ${bundle.id}`);
         });
 }
