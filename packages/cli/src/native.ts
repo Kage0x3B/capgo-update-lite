@@ -17,9 +17,12 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { resolveIosShortVersion, type ResolveOptions } from './ios-version.js';
+
+export { resolveIosShortVersion } from './ios-version.js';
+export type { IosVersionLayer, IosVersionResult, IosVersionTraceEntry, ResolveOptions } from './ios-version.js';
 
 const ANDROID_GRADLE_CANDIDATES = ['app/build.gradle', 'app/build.gradle.kts'];
-const IOS_INFO_PLIST_CANDIDATES = ['App/App/Info.plist'];
 
 // Native-plugin prefixes. Anything matching these in dependencies+devDependencies
 // becomes part of the fingerprint; a version bump in any of them hints that the
@@ -55,21 +58,23 @@ export async function readAndroidVersionName(projectRoot: string): Promise<strin
     return null;
 }
 
-export async function readIosShortVersion(projectRoot: string): Promise<string | null> {
-    for (const rel of IOS_INFO_PLIST_CANDIDATES) {
-        const p = path.resolve(projectRoot, rel);
-        if (!existsSync(p)) continue;
-        let raw: string;
-        try {
-            raw = await readFile(p, 'utf8');
-        } catch {
-            continue;
-        }
-        // Structural: <key>CFBundleShortVersionString</key>\s*<string>X.Y.Z</string>
-        const m = raw.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
-        if (m) return m[1].trim();
-    }
-    return null;
+/**
+ * Backwards-compatible thin wrapper. Returns:
+ *   - the resolved literal version when every layer succeeds,
+ *   - the unresolved partial (e.g. `$(MARKETING_VERSION)`) when no layer can
+ *     resolve it (preserves the legacy "let preflight semver-check it" path),
+ *   - null when there's no Info.plist at all.
+ *
+ * For richer error reporting prefer `resolveIosShortVersion` directly — it
+ * returns the layer trace.
+ */
+export async function readIosShortVersion(
+    projectRoot: string,
+    options: ResolveOptions = {}
+): Promise<string | null> {
+    const result = await resolveIosShortVersion(projectRoot, options);
+    if (!result) return null;
+    return result.ok ? result.version : result.partial;
 }
 
 export async function collectNativePackages(packageJsonPath: string): Promise<Record<string, string>> {
