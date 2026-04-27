@@ -26,11 +26,38 @@ export CAPGO_ADMIN_TOKEN=<bearer-token>
 # 3. register the app (one-time)
 pnpx capgo-update-lite-cli apps add com.example.app --name "Example"
 
-# 4. publish a bundle
-pnpx capgo-update-lite-cli publish 1.4.2 ./build
+# 4. publish a bundle (version sourced from package.json)
+pnpx capgo-update-lite-cli publish
 ```
 
-With a `capgo-update.json` in place, positionals collapse to whatever you haven't already configured.
+With a `capgo-update.config.json` in place, the only thing the publish flow needs at runtime is the admin token (env). The bundle version is read from `package.json`; if it matches the active bundle on the channel, the CLI prompts for a `patch`/`minor`/`major` bump and writes the result back.
+
+## Shell completions
+
+The CLI ships a `complete <shell>` subcommand that emits a tab-completion script for `bash`, `zsh`, `fish`, and `powershell`. The `init` wizard offers to install completions automatically; to install or re-install manually:
+
+```sh
+# bash
+echo 'eval "$(capgo-update-lite complete bash)"' >> ~/.bashrc
+
+# zsh
+echo 'eval "$(capgo-update-lite complete zsh)"' >> ~/.zshrc
+
+# fish
+capgo-update-lite complete fish > ~/.config/fish/completions/capgo-update-lite.fish
+
+# powershell
+capgo-update-lite complete powershell >> $PROFILE
+```
+
+What gets completed:
+
+- **Static enums** — `--platforms`, `--platform`, `--state`, `--disable-auto-update`.
+- **App IDs** — `--app` / `--app-id` (and the positional on `apps get` / `apps set-policy`) hit `GET /admin/apps`.
+- **Channels** — `--channel` enumerates distinct channels seen on the resolved app's bundles.
+- **Bundle versions** — the positional on `bundles promote <version>` lists `state=active` rows for the resolved `(appId, channel)` scope.
+
+Dynamic completions need `CAPGO_SERVER_URL` + `CAPGO_ADMIN_TOKEN` available at TAB time (env or in `capgo-update.config.json` in the cwd). They use a 5-minute on-disk cache at `${XDG_CACHE_HOME:-~/.cache}/capgo-update-lite/`; CLI write commands (`apps add` / `set-policy`, `bundles delete` / `edit` / `promote`, `publish`) invalidate the matching entries automatically. Each completion fetch has a 1.5 s timeout and falls back silently to "no completions" on any error — TAB never hangs the shell prompt.
 
 ## Subcommands
 
@@ -41,18 +68,18 @@ Every subcommand inherits the three global flags (`--server-url`, `--admin-token
 Zip a dist directory and upload it as a new bundle.
 
 ```sh
-pnpx capgo-update-lite-cli publish [app-id] [version] [dist-dir] [options]
+pnpx capgo-update-lite-cli publish [options]
 ```
 
-Positionals map to `--app-id`, `--bundle-version`, and `--dist-dir`. Any positional can be omitted if the value is set via flag, env, or config file.
+The bundle version defaults to `package.json`'s `version` field. If it matches the active bundle on the target channel, the CLI prompts for a `patch`/`minor`/`major` bump and writes the new value back to `package.json` before publishing. Pass `--bundle-version` (or set `CAPGO_VERSION`) to override.
 
 Options specific to `publish`:
 
 | Flag                            | Purpose                                                                 |
 | ------------------------------- | ----------------------------------------------------------------------- |
-| `--app-id <id>`                 | Override positional `<app-id>`                                          |
-| `--bundle-version <semver>`     | Override positional `<version>` (avoids collision with root `--version`) |
-| `--dist-dir <path>`             | Override positional `<dist-dir>`                                        |
+| `--app-id <id>`                 | Reverse-domain app identifier (or set in config / `CAPGO_APP_ID`)       |
+| `--bundle-version <semver>`     | Bundle version (defaults to `package.json` version)                     |
+| `--dist-dir <path>`             | Built web bundle directory (or set in config / `CAPGO_DIST_DIR`)        |
 | `-c, --channel <name>`          | Release channel (default `production`)                                  |
 | `-p, --platforms <list>`        | Comma-separated list of `ios,android,electron`                          |
 | `--link <url>`                  | Release notes / changelog URL                                           |
@@ -72,13 +99,29 @@ Options specific to `publish`:
 
 ### `init`
 
-Scaffold a `capgo-update.json` file in the current directory.
+Interactive wizard that scaffolds `capgo-update.config.json` in the current directory.
 
 ```sh
-pnpx capgo-update-lite-cli init [--force] [--path <path>]
+pnpx capgo-update-lite-cli init [--force] [--path <path>] \
+  [--app-id <id>] [--server-url <url>] [--channel <name>] [--dist-dir <path>] \
+  [--no-validate]
 ```
 
-The template includes `appId`, `serverUrl`, `channel`, `distDir`, and `platforms`. The admin token is intentionally absent; keep it in `CAPGO_ADMIN_TOKEN` or gitignore the config file.
+Prompts (each is skipped when the matching value is already provided via flag, env, or an existing config file):
+
+- **App ID** — reverse-domain identifier (`com.example.app`).
+- **Server URL** — public URL of your deployed worker.
+- **Channel** — defaults to `production`.
+- **Dist directory** — auto-detects `./build`, `./dist`, `./www`, `./out`, `./public` in the cwd; each option's hint says whether it contains `index.html`. Falls back to a free-form path prompt if no candidates exist.
+
+Then verifies the configuration against the server:
+
+- Asks for an admin token at a hidden password prompt. **Leave empty** to fall back to a public health check only — `GET /health`, no admin endpoints touched.
+- **With a token:** pings `/health`, then `GET /admin/apps` with the bearer token to verify auth. If your `appId` isn't registered yet, the wizard offers to register it inline (same path as `apps add`) — confirm + display-name prompt + `POST /admin/apps`. The display-name default is derived from the appId's last segment (`com.example.member_app` → `Member App`), editable.
+- The token is used once and discarded; it is **never** written to `capgo-update.config.json`. If `CAPGO_ADMIN_TOKEN` (or `--admin-token`) is already set, the wizard reuses that and skips the password prompt.
+- Pass `--no-validate` to skip the verification step entirely (e.g. when scripting init in a context with no network access).
+
+The template includes `appId`, `serverUrl`, `channel`, `distDir`, `platforms` (default `["ios", "android"]`), and `autoMinUpdateBuild: true`. The admin token is intentionally absent — keep it in `CAPGO_ADMIN_TOKEN`.
 
 ### `apps list`
 
@@ -160,10 +203,12 @@ Defaults to platform `ios` and current version `0.0.0` (which forces an `update-
 
 Every value resolves via four routes. Precedence, highest wins:
 
-1. CLI flag (and positional arguments for `publish`)
+1. CLI flag
 2. Environment variable (`CAPGO_*`)
-3. JSON config file (`./capgo-update.json` auto-loaded, or `--config <path>`)
+3. JSON config file (`./capgo-update.config.json` auto-loaded, or `--config <path>`)
 4. Built-in defaults (`channel=production`, `activate=true`, `codeCheck=true`)
+
+For `publish` specifically, when `--bundle-version` / `CAPGO_VERSION` / `version` are all absent, the bundle version is sourced from `package.json`'s `version` field. If that version matches the bundle currently active on the channel, the CLI prompts (`Cancel` / `Increase patch version` / `Increase minor version` / `Increase major version`) and writes the bumped value back to `package.json` before publishing. In non-interactive contexts (no TTY, e.g. CI), the prompt is replaced by a hard fail — bump `package.json` ahead of time or pass `--bundle-version` / `--version-exists-ok` explicitly.
 
 The admin token follows the same three-route rule. Prefer the environment variable:
 
@@ -173,7 +218,7 @@ The admin token follows the same three-route rule. Prefer the environment variab
 
 ### Config file example
 
-Drop `capgo-update.json` in the directory where you run the CLI (typically your mobile app's project root). `capgo-update.config.json` is also auto-loaded.
+Drop `capgo-update.config.json` in the directory where you run the CLI (typically your mobile app's project root). The CLI auto-loads it; pass `--config <path>` to point at a different file.
 
 ```json
 {
@@ -186,11 +231,13 @@ Drop `capgo-update.json` in the directory where you run the CLI (typically your 
 }
 ```
 
-With the config file present, `publish` shortens to:
+With the config file present and `CAPGO_ADMIN_TOKEN` exported, `publish` shortens to:
 
 ```sh
-pnpx capgo-update-lite-cli publish 1.4.2
+pnpx capgo-update-lite-cli publish
 ```
+
+The bundle version is sourced from `package.json` automatically; the bump prompt handles the case where it matches the active bundle.
 
 ### Full option reference
 
@@ -201,9 +248,9 @@ Rows marked "publish-only" are only read by the `publish` subcommand. Everything
 | `--server-url <url>`          | `CAPGO_SERVER_URL`        | `serverUrl`       | global       | OTA server base URL                                       |
 | `--admin-token <token>`       | `CAPGO_ADMIN_TOKEN`       | `adminToken`      | global       | Bearer token for `/admin/*`                               |
 | `--config <path>`             | `CAPGO_CONFIG`            | n/a               | global       | JSON config path                                          |
-| `<app-id>` / `--app-id <id>`  | `CAPGO_APP_ID`            | `appId`           | publish-only | Positional #1                                             |
-| `<version>` / `--bundle-version <semver>` | `CAPGO_VERSION` | `version`       | publish-only | Positional #2; `--bundle-version` avoids the `--version` collision |
-| `<dist-dir>` / `--dist-dir <path>` | `CAPGO_DIST_DIR`     | `distDir`         | publish-only | Positional #3                                             |
+| `--app-id <id>`               | `CAPGO_APP_ID`            | `appId`           | publish-only | Reverse-domain app identifier                             |
+| `--bundle-version <semver>`   | `CAPGO_VERSION`           | `version`         | publish-only | Bundle version. Defaults to `package.json` version. Named to avoid commander's reserved root `--version` flag. |
+| `--dist-dir <path>`           | `CAPGO_DIST_DIR`          | `distDir`         | publish-only | Built web bundle directory (must contain `index.html`)   |
 | `-c, --channel <name>`        | `CAPGO_CHANNEL`           | `channel`         | most         | Default `production`                                      |
 | `-p, --platforms <list>`      | `CAPGO_PLATFORMS`         | `platforms`       | publish-only | `ios,android,electron` (comma-separated on CLI and env)   |
 | `--link <url>`                | `CAPGO_LINK`              | `link`            | publish-only | Release notes / changelog URL                             |
@@ -227,15 +274,15 @@ Rows marked "publish-only" are only read by the `publish` subcommand. Everything
 
 All of these can be bypassed with `--skip-preflight`. Checks that rely on local files auto-detect from the current working directory and silently skip if the file is absent.
 
-- **Semver validity.** Rejects malformed `<version>`.
-- **`package.json` alignment.** `<version>` must be `>=` the `package.json` version. Major bumps emit a warning so you can confirm the native shell supports the new bundle.
-- **`capacitor.config.(ts|js|json)` alignment.** Its `appId` must match `<app-id>`. The `CapacitorUpdater.updateUrl`, if set, should start with the server URL (warning only).
-- **Native build resolution.** Reads `versionName` from `android/app/build.gradle(.kts)` and `CFBundleShortVersionString` from `ios/App/App/Info.plist` to default `min_android_build` and `min_ios_build`. Explicit `--min-android-build` / `--min-ios-build` override. Fails if neither explicit value nor a native project is available.
+- **Version autoresolve.** When `--bundle-version` is absent, sources the version from `package.json`. Compares against the active bundle on the channel: newer ⇒ continue; older ⇒ fail (downgrade); equal + sourced ⇒ prompt for `patch`/`minor`/`major` bump and write back to `package.json`; equal + explicit ⇒ fail unless `--version-exists-ok`.
+- **Version validity.** The resolved version must parse as `MAJOR[.MINOR[.PATCH]]` (Apple's `CFBundleShortVersionString` rules — `110`, `110.0`, `1.2.3` are all accepted; missing segments default to `0`).
+- **`package.json` alignment.** Bundle version must be `>=` the `package.json` version. Major bumps emit a warning so you can confirm the native shell supports the new bundle.
+- **`capacitor.config.(ts|js|json)` alignment.** Its `appId` must match the configured `appId`. The `CapacitorUpdater.updateUrl`, if set, should start with the server URL (warning only).
+- **Native build resolution.** Reads `versionName` from `android/app/build.gradle(.kts)` to default `min_android_build`. For iOS, walks Info.plist → `project.pbxproj` → `.xcconfig` → `xcodebuild` (macOS only) to resolve `CFBundleShortVersionString`, even when it's a `$(MARKETING_VERSION)` placeholder. Explicit `--min-android-build` / `--min-ios-build` override. Fails if neither explicit value nor a native project is available, with a layer-by-layer trace of what was tried.
 - **Server ping.** `GET /` with a 5s timeout.
-- **App registered.** `GET /admin/apps` must include `<app-id>` (requires an admin token).
-- **Version progression.** The new version must be strictly greater than the currently-active bundle on the channel. Duplicates and downgrades fail; `--version-exists-ok` converts "already active" to exit 0 for CI.
-- **Dist validation.** `<dist-dir>/index.html` must exist. Cloudflare adapter artifacts (`_worker.js`, `_routes.json`) must not, which catches accidental web builds.
-- **`notifyAppReady()` source scan.** At least one `.js` file under `<dist-dir>` must reference `notifyAppReady`. Without that call the plugin rolls back after 10 seconds. Disable with `--no-code-check` if your build minifies the symbol away.
+- **App registered.** `GET /admin/apps` must include the configured `appId` (requires an admin token).
+- **Dist validation.** `distDir/index.html` must exist. Cloudflare adapter artifacts (`_worker.js`, `_routes.json`) must not, which catches accidental web builds.
+- **`notifyAppReady()` source scan.** At least one `.js` file under `distDir` must reference `notifyAppReady`. Without that call the plugin rolls back after 10 seconds. Disable with `--no-code-check` if your build minifies the symbol away.
 - **Zip integrity.** The generated ZIP is re-parsed to verify structural validity.
 - **Size bounds.** Less than 1 KB fails (likely an empty build). Over 50 MB warns (slow on cellular). Over 500 MB fails.
 

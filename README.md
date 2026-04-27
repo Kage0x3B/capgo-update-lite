@@ -182,29 +182,40 @@ Produce whatever Capacitor expects, typically a `build/` or `www/` directory wit
 
 ### 3. Publish with the CLI
 
+Scaffold a project config once:
+
 ```sh
-pnpx capgo-update-lite-cli publish com.example.app 1.2.3 ./build --activate
+pnpx capgo-update-lite-cli init
+# edits capgo-update.config.json — set appId / serverUrl / channel / distDir, commit it
 ```
 
-The CLI can authenticate via any of three routes (pick whichever suits your environment): `--admin-token <token>`, `CAPGO_ADMIN_TOKEN` env, or an `adminToken` key in a `capgo-update.json` config. Same for every other option, with precedence CLI flag > `CAPGO_*` env > JSON config > default.
+Then ship a bundle whenever your web build is fresh:
+
+```sh
+pnpx capgo-update-lite-cli publish
+```
+
+That's the whole command. The bundle version is read from `package.json`; if it matches the bundle currently active on the channel, the CLI prompts for a `patch`/`minor`/`major` bump and writes the new value back to `package.json` before publishing. Native min-build floors are auto-detected from `android/app/build.gradle` and `ios/App/App/Info.plist` (the iOS resolver follows `$(MARKETING_VERSION)` through `project.pbxproj` → xcconfig → `xcodebuild` automatically). To override any of this, pass the matching flag (`--bundle-version`, `--min-android-build`, `--min-ios-build`, `--channel`, …).
+
+Auth has three routes (pick whichever suits your environment): `--admin-token <token>`, `CAPGO_ADMIN_TOKEN` env, or an `adminToken` key in `capgo-update.config.json`. Same precedence ladder for every option: CLI flag > `CAPGO_*` env > JSON config > default.
 
 ### CLI subcommand summary
 
-| Subcommand                | Purpose                                                                |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `publish`                 | Zip a dist directory and ship it as a bundle (init → R2 PUT → commit). |
-| `apps list` / `add`       | List registered apps; register a new one.                              |
-| `bundles list` / `delete` | Inspect or remove bundles (soft delete or `--purge` for hard delete).  |
-| `probe`                   | Smoke-test `POST /updates` with a synthetic device request.            |
-| `stats`                   | List recent stats events, filterable by app / action / time window.    |
-| `init`                    | Scaffold a `capgo-update.json` config file.                            |
+| Subcommand                            | Purpose                                                                |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| `publish`                             | Zip a dist directory and ship it as a bundle (init → R2 PUT → commit). |
+| `apps list` / `add` / `set-policy`    | List registered apps; register a new one; update compatibility policy. |
+| `bundles list` / `delete` / `promote` | Inspect bundles, soft / hard-delete (`--purge`), promote a previous version to active. |
+| `probe`                               | Smoke-test `POST /updates` with a synthetic device request.            |
+| `stats`                               | List recent stats events, filterable by app / action / time window.    |
+| `init`                                | Scaffold a `capgo-update.config.json` config file.                            |
 
 ### Channels and rollback
 
 Devices only receive bundles whose channel matches their plugin's `defaultChannel`. Publish to `staging` first:
 
 ```sh
-pnpx capgo-update-lite-cli publish com.example.app 1.2.3 ./build --channel staging --activate
+pnpx capgo-update-lite-cli publish --channel staging
 ```
 
 To roll back, promote an older bundle via the dashboard (`/dashboard/apps/<id>`) or the CLI:
