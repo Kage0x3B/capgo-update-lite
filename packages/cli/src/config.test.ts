@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Command } from 'commander';
-import { resolveConfig, type FileConfig } from './config.js';
+import { loadCompletionConfig, resolveConfig, type FileConfig } from './config.js';
 
 // `fail` calls process.exit(1). Tests replace it with a throw so we can assert
 // failure cases without killing the worker.
@@ -62,7 +62,7 @@ function makeCmd(opts: Record<string, unknown>): Command {
 }
 
 async function writeCfgFile(body: FileConfig): Promise<void> {
-    await writeFile(path.join(tmp, 'capgo-update.json'), JSON.stringify(body));
+    await writeFile(path.join(tmp, 'capgo-update.config.json'), JSON.stringify(body));
 }
 
 describe('resolveConfig precedence', () => {
@@ -172,5 +172,66 @@ describe('resolveConfig — regression smoke on existing ladder', () => {
         expect((await resolveConfig(makeCmd({}))).appId).toBe('com.env.app');
         delete process.env.CAPGO_APP_ID;
         expect((await resolveConfig(makeCmd({}))).appId).toBe('com.file.app');
+    });
+});
+
+describe('loadCompletionConfig', () => {
+    it('returns env values when set', async () => {
+        process.env.CAPGO_SERVER_URL = 'https://env.example.com';
+        process.env.CAPGO_ADMIN_TOKEN = 'env-tok';
+        process.env.CAPGO_APP_ID = 'com.env.app';
+        process.env.CAPGO_CHANNEL = 'staging';
+        const cfg = await loadCompletionConfig();
+        expect(cfg.serverUrl).toBe('https://env.example.com');
+        expect(cfg.adminToken).toBe('env-tok');
+        expect(cfg.appId).toBe('com.env.app');
+        expect(cfg.channel).toBe('staging');
+    });
+
+    it('strips trailing slashes from the env serverUrl', async () => {
+        process.env.CAPGO_SERVER_URL = 'https://env.example.com////';
+        const cfg = await loadCompletionConfig();
+        expect(cfg.serverUrl).toBe('https://env.example.com');
+    });
+
+    it('falls back to capgo-update.config.json when env is unset', async () => {
+        await writeCfgFile({
+            serverUrl: 'https://file.example.com/',
+            adminToken: 'file-tok',
+            appId: 'com.file.app',
+            channel: 'production'
+        });
+        const cfg = await loadCompletionConfig();
+        expect(cfg.serverUrl).toBe('https://file.example.com');
+        expect(cfg.adminToken).toBe('file-tok');
+        expect(cfg.appId).toBe('com.file.app');
+        expect(cfg.channel).toBe('production');
+    });
+
+    it('falls back to capacitor.config.* for appId only', async () => {
+        await writeFile(
+            path.join(tmp, 'capacitor.config.ts'),
+            `export default { appId: 'com.cap.detected', appName: 'Cap' };`
+        );
+        const cfg = await loadCompletionConfig();
+        expect(cfg.appId).toBe('com.cap.detected');
+        // serverUrl and adminToken stay unset — capacitor.config doesn't carry those.
+        expect(cfg.serverUrl).toBeUndefined();
+        expect(cfg.adminToken).toBeUndefined();
+    });
+
+    it('returns {} when nothing is set, without throwing', async () => {
+        const cfg = await loadCompletionConfig();
+        expect(cfg).toEqual({});
+    });
+
+    it('does not throw on a missing CAPGO_CONFIG path (would fail() in resolveConfig)', async () => {
+        process.env.CAPGO_CONFIG = path.join(tmp, 'does-not-exist.json');
+        await expect(loadCompletionConfig()).resolves.toEqual({});
+    });
+
+    it('does not throw on an unparseable config file', async () => {
+        await writeFile(path.join(tmp, 'capgo-update.config.json'), '{not valid json');
+        await expect(loadCompletionConfig()).resolves.toEqual({});
     });
 });

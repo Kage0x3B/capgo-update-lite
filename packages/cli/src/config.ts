@@ -2,9 +2,9 @@
  * Single source of truth for configuration resolution.
  *
  * Precedence (highest → lowest):
- *   1. CLI flags (including positionals promoted to opts by the action)
+ *   1. CLI flags
  *   2. Environment variables (CAPGO_*)
- *   3. JSON config file (./capgo-update.json by default, or --config <path>)
+ *   3. JSON config file (./capgo-update.config.json by default, or --config <path>)
  *   4. Built-in defaults (channel=production, activate=true, codeCheck=true)
  *
  * Each subcommand passes a `requires` list so the shared validator can fail
@@ -16,6 +16,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Command } from 'commander';
 import { PLATFORMS, type Platform } from './api.js';
+import { readAppIdFromCapacitorConfig } from './capacitor-config.js';
 import { fail } from './output.js';
 
 export type FileConfig = {
@@ -39,6 +40,7 @@ export type FileConfig = {
     autoMinUpdateBuild?: boolean;
     androidProject?: string;
     iosProject?: string;
+    sessionKey?: string;
 };
 
 export type ResolvedConfig = {
@@ -63,6 +65,7 @@ export type ResolvedConfig = {
     autoMinUpdateBuild: boolean;
     androidProject: string;
     iosProject: string;
+    sessionKey: string | undefined;
     // Populated by preflightNativeBuild; serialised into the /admin/bundles/init body.
     nativePackages: Record<string, string> | undefined;
 };
@@ -70,7 +73,7 @@ export type ResolvedConfig = {
 export type Requirement = 'serverUrl' | 'adminToken' | 'appId' | 'version' | 'distDir';
 
 const DEFAULT_CHANNEL = 'production';
-const DEFAULT_CONFIG_FILENAMES = ['capgo-update.json', 'capgo-update.config.json'];
+const DEFAULT_CONFIG_FILENAMES = ['capgo-update.config.json'];
 
 function envStr(name: string): string | undefined {
     const v = process.env[name];
@@ -92,6 +95,9 @@ function parsePlatformList(s: string | undefined): Platform[] | undefined {
         .split(',')
         .map((x) => x.trim())
         .filter(Boolean);
+    if (parts.length === 0) {
+        fail(`--platforms must list at least one of ${PLATFORMS.join(', ')}`);
+    }
     for (const p of parts) {
         if (!PLATFORMS.includes(p as Platform)) {
             fail(`invalid platform "${p}" (expected one of ${PLATFORMS.join(', ')})`);
@@ -103,6 +109,7 @@ function parsePlatformList(s: string | undefined): Platform[] | undefined {
 function validatePlatformsArray(arr: unknown, source: string): Platform[] | undefined {
     if (arr === undefined) return undefined;
     if (!Array.isArray(arr)) fail(`${source}: "platforms" must be an array`);
+    if (arr.length === 0) fail(`${source}: "platforms" must list at least one of ${PLATFORMS.join(', ')}`);
     for (const p of arr) {
         if (typeof p !== 'string' || !PLATFORMS.includes(p as Platform)) {
             fail(`${source}: invalid platform "${String(p)}" (expected one of ${PLATFORMS.join(', ')})`);
@@ -176,6 +183,7 @@ export async function resolveConfig(cmd: Command, requires: readonly Requirement
         androidProject:
             optStr(opts, 'androidProject') ?? envStr('CAPGO_ANDROID_PROJECT') ?? file.androidProject ?? './android',
         iosProject: optStr(opts, 'iosProject') ?? envStr('CAPGO_IOS_PROJECT') ?? file.iosProject ?? './ios',
+        sessionKey: optStr(opts, 'sessionKey') ?? envStr('CAPGO_SESSION_KEY') ?? file.sessionKey,
         nativePackages: undefined
     };
 
@@ -188,4 +196,57 @@ export async function resolveConfig(cmd: Command, requires: readonly Requirement
     }
 
     return cfg;
+}
+
+export type CompletionConfig = {
+    serverUrl?: string;
+    adminToken?: string;
+    appId?: string;
+    channel?: string;
+};
+
+/**
+ * Slim, never-throwing config resolver for the shell-completion path.
+ *
+ * `resolveConfig` reads parsed CLI flags via `cmd.optsWithGlobals()`, but at
+ * TAB time the user is mid-typing — there's no parsed Command. Worse, the
+ * existing `loadConfigFile` calls `fail()` (which `process.exit`s) on a
+ * missing/unreadable file, which would silently kill the user's shell prompt.
+ * This helper walks env → JSON config file → capacitor.config.* and returns
+ * `{}` on any failure. Completion handlers fall back to "no completions"
+ * when fields are missing.
+ */
+export async function loadCompletionConfig(): Promise<CompletionConfig> {
+    const file = await tryLoadConfigFile(envStr('CAPGO_CONFIG'));
+    let detectedAppId: string | undefined;
+    try {
+        const detected = await readAppIdFromCapacitorConfig();
+        detectedAppId = detected?.appId;
+    } catch {
+        detectedAppId = undefined;
+    }
+    const serverRaw = envStr('CAPGO_SERVER_URL') ?? file.serverUrl;
+    return {
+        serverUrl: serverRaw?.replace(/\/+$/, '') || undefined,
+        adminToken: envStr('CAPGO_ADMIN_TOKEN') ?? file.adminToken,
+        appId: envStr('CAPGO_APP_ID') ?? file.appId ?? detectedAppId,
+        channel: envStr('CAPGO_CHANNEL') ?? file.channel
+    };
+}
+
+/** Like `loadConfigFile`, but never calls `fail()`. */
+async function tryLoadConfigFile(explicit: string | undefined): Promise<FileConfig> {
+    const candidates = explicit
+        ? [explicit]
+        : DEFAULT_CONFIG_FILENAMES.map((name) => path.resolve(process.cwd(), name));
+    for (const candidate of candidates) {
+        if (!existsSync(candidate)) continue;
+        try {
+            const raw = await readFile(candidate, 'utf8');
+            return JSON.parse(raw) as FileConfig;
+        } catch {
+            return {};
+        }
+    }
+    return {};
 }

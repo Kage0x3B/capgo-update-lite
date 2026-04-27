@@ -15,7 +15,8 @@ import { registerInit } from './commands/init.js';
 import { registerProbe } from './commands/probe.js';
 import { registerPublish } from './commands/publish.js';
 import { registerStats } from './commands/stats.js';
-import { fail } from './output.js';
+import { dispatchCompletionCallback, isCompletionCallback, registerCompletions } from './completion.js';
+import { fail, isJsonMode } from './output.js';
 
 type Pkg = { name: string; version: string };
 
@@ -38,7 +39,7 @@ function guardPublishVersionCollision(argv: readonly string[]): void {
     const next = tail[versionIdx + 1];
     if (next && !next.startsWith('-')) {
         fail(
-            '`publish --version <semver>` collides with the root --version flag. Use the positional <version>, --bundle-version <semver>, or CAPGO_VERSION instead.'
+            '`publish --version <semver>` collides with the root --version flag. Use --bundle-version <semver> or CAPGO_VERSION instead.'
         );
     }
 }
@@ -53,7 +54,7 @@ async function main(): Promise<void> {
         .version(pkg.version, '-V, --version', 'print CLI version')
         .option('--server-url <url>', 'OTA server base URL (env CAPGO_SERVER_URL)')
         .option('--admin-token <token>', 'Bearer token for /admin/* (env CAPGO_ADMIN_TOKEN)')
-        .option('--config <path>', 'JSON config path (default: ./capgo-update.json, env CAPGO_CONFIG)')
+        .option('--config <path>', 'JSON config path (default: ./capgo-update.config.json, env CAPGO_CONFIG)')
         .showHelpAfterError('(run with --help for usage)');
 
     registerPublish(program);
@@ -63,9 +64,27 @@ async function main(): Promise<void> {
     registerStats(program);
     registerInit(program);
 
+    // Must run AFTER every register*() call so tab() walks the final command
+    // tree. Adds the `complete` subcommand and per-option/argument handlers.
+    registerCompletions(program);
+
+    // The shell calls back with `<bin> complete -- <subcommand-args>` for
+    // live completions. tab patches `program.parse` to handle that, but our
+    // main path uses parseAsync which bypasses the patch — so we route
+    // completion callbacks through the synchronous parse here.
+    if (isCompletionCallback(process.argv)) {
+        dispatchCompletionCallback(program, process.argv);
+        return;
+    }
+
     await program.parseAsync();
 }
 
 main().catch((e) => {
-    fail(e instanceof Error ? (e.stack ?? e.message) : String(e));
+    // In JSON mode emit just the message — a multi-line stack would still
+    // round-trip through JSON.stringify safely, but it's noisy in a piped
+    // consumer. Non-JSON mode keeps the stack for human debugging.
+    const msg = e instanceof Error ? e.message : String(e);
+    const detail = e instanceof Error ? (e.stack ?? e.message) : String(e);
+    fail(isJsonMode() ? msg : detail);
 });
