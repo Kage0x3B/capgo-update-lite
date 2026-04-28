@@ -9,9 +9,14 @@ on:
 
 permissions:
     # contents: write — needed for `gh release create` at the end of the job.
-    # id-token: write — OIDC for npm provenance. With this, npm shows a
-    # "verified provenance" badge tying the published artifact to this exact
-    # workflow + commit.
+    # id-token: write — OIDC. Doubles as:
+    #   1. npm Trusted Publishing — npm trusts the OIDC token instead of
+    #      requiring an NPM_TOKEN secret. Configure once at
+    #      npmjs.com → capgo-update-lite-cli → Settings → Trusted Publishers
+    #      → GitHub Actions (org `Kage0x3B`, repo `capgo-update-lite`,
+    #      workflow `release-cli.yml`, environment blank).
+    #   2. npm provenance — npm shows a "verified provenance" badge tying
+    #      the published artifact to this exact workflow + commit.
     contents: write
     id-token: write
 
@@ -52,11 +57,12 @@ jobs:
                   fi
 
             - name: Publish to npm
+              # Auth is via OIDC Trusted Publishing — no NPM_TOKEN needed (the
+              # job's id-token: write permission lets npm verify the runner
+              # identity against the package's configured trusted publisher).
               # --no-git-checks: pnpm refuses to publish from a detached HEAD
               # without this; tag pushes are always detached.
               run: pnpm -F capgo-update-lite-cli publish --provenance --access public --no-git-checks
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
             # Mirror the annotated-tag message into a GitHub Release page for
             # the repo. Only runs when npm publish succeeded (default
