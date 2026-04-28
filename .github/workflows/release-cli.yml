@@ -8,9 +8,11 @@ on:
         tags: ['cli-v*']
 
 permissions:
-    # OIDC for npm provenance. With this, npm shows a "verified provenance"
-    # badge tying the published artifact to this exact workflow + commit.
-    contents: read
+    # contents: write — needed for `gh release create` at the end of the job.
+    # id-token: write — OIDC for npm provenance. With this, npm shows a
+    # "verified provenance" badge tying the published artifact to this exact
+    # workflow + commit.
+    contents: write
     id-token: write
 
 jobs:
@@ -55,3 +57,17 @@ jobs:
               run: pnpm -F capgo-update-lite-cli publish --provenance --access public --no-git-checks
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+            # Mirror the annotated-tag message into a GitHub Release page for
+            # the repo. Only runs when npm publish succeeded (default
+            # implicit `if: success()`). Requires an annotated tag; lightweight
+            # tags produce empty release notes.
+            - name: Create GitHub Release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  TITLE="cli v${GITHUB_REF_NAME#cli-v}"
+                  gh release create "$GITHUB_REF_NAME" \
+                      --title "$TITLE" \
+                      --notes-from-tag \
+                      --verify-tag
