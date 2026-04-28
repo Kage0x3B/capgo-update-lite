@@ -198,7 +198,7 @@
         </div>
         <label class="flex items-center gap-2 text-sm">
             <input class="checkbox" type="checkbox" bind:checked={activateOnCommit} />
-            <span>Activate on commit (atomically deactivates any current active bundle in this channel)</span>
+            <span>Activate on commit (other active bundles in this channel stay active — guards pick per device)</span>
         </label>
         <div class="flex items-center gap-3">
             <button class="btn preset-filled-primary-500" type="submit" disabled={phase !== 'idle'}>

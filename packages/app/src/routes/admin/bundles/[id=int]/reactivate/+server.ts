@@ -12,7 +12,7 @@ export const POST = defineRoute(
             operationId: 'reactivateBundle',
             summary: 'Restore an auto-disabled bundle',
             description:
-                'Atomically flips state=active + active=true (deactivating siblings in the same channel) and stamps blacklist_reset_at=now() so previously-failed devices get another shot at the bundle.',
+                'Flips state=active + active=true and stamps blacklist_reset_at=now() so previously-failed devices get another shot at the bundle. Sibling bundles in the same channel are left active — the /updates resolver picks per device.',
             tags: ['admin']
         }
     },

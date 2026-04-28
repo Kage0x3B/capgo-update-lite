@@ -157,7 +157,7 @@ export const BundleCommitSchema = v.object({
     activate: v.optional(
         v.pipe(
             v.boolean(),
-            v.description('If true, atomically deactivates siblings in (app_id, channel) and activates this one.')
+            v.description('If true, marks this bundle active. Siblings in (app_id, channel) stay active — guards in /updates pick per device.')
         )
     )
 });
@@ -202,7 +202,12 @@ export const BundleDeleteQuerySchema = v.object({
 
 export const BundlePatchSchema = v.object({
     active: v.optional(
-        v.pipe(v.boolean(), v.description('Activate this bundle and deactivate siblings in (app_id, channel).'))
+        v.pipe(
+            v.boolean(),
+            v.description(
+                'Set this bundle active or inactive. Siblings in (app_id, channel) are not touched — multiple bundles can be active and the /updates resolver picks per device based on guards.'
+            )
+        )
     ),
     channel: v.optional(ChannelInput),
     platforms: v.optional(v.pipe(v.array(PLATFORM), v.minLength(1))),

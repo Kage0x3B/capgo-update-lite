@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { ApiError } from '$lib/server/defineRoute.js';
 import { apps, bundles, type Bundle } from '$lib/server/db/schema.js';
@@ -146,27 +146,22 @@ export async function commitBundle(db: Db, env: R2Env, input: CommitBundleInput)
         throw new ApiError(400, 'invalid_request', `checksum mismatch: client=${expected} server=${actual}`);
     }
 
-    return db.transaction(async (tx) => {
-        if (activate) {
-            await tx
-                .update(bundles)
-                .set({ active: false })
-                .where(
-                    and(eq(bundles.appId, bundle.appId), eq(bundles.channel, bundle.channel), ne(bundles.id, bundle_id))
-                );
-        }
-        const [row] = await tx
-            .update(bundles)
-            .set({
-                state: 'active',
-                checksum: actual,
-                active: activate ?? false,
-                releasedAt: sql`now()`
-            })
-            .where(eq(bundles.id, bundle_id))
-            .returning();
-        return row;
-    });
+    // Sibling bundles in the same (appId, channel) are intentionally left
+    // alone. With per-bundle min-native-build guards, multiple active bundles
+    // can coexist on a channel and the /updates resolver picks the newest one
+    // each device qualifies for. Operators retire old lanes by PATCHing
+    // active=false explicitly.
+    const [row] = await db
+        .update(bundles)
+        .set({
+            state: 'active',
+            checksum: actual,
+            active: activate ?? false,
+            releasedAt: sql`now()`
+        })
+        .where(eq(bundles.id, bundle_id))
+        .returning();
+    return row;
 }
 
 export type PatchBundleInput = {
@@ -184,56 +179,36 @@ export async function patchBundle(db: Db, id: number, patch: PatchBundleInput): 
         throw new ApiError(409, 'conflict', `cannot activate bundle ${id}: state is '${current.state}'`);
     }
 
-    return db.transaction(async (tx) => {
-        if (patch.active === true) {
-            await tx
-                .update(bundles)
-                .set({ active: false })
-                .where(
-                    and(
-                        eq(bundles.appId, current.appId),
-                        eq(bundles.channel, patch.channel ?? current.channel),
-                        ne(bundles.id, id)
-                    )
-                );
-        }
-        const set: Partial<typeof bundles.$inferInsert> = {};
-        if (patch.active !== undefined) set.active = patch.active;
-        if (patch.channel !== undefined) set.channel = patch.channel;
-        if (patch.platforms !== undefined) set.platforms = patch.platforms;
-        if (patch.link !== undefined) set.link = patch.link;
-        if (patch.comment !== undefined) set.comment = patch.comment;
-        if (Object.keys(set).length === 0) return current;
+    const set: Partial<typeof bundles.$inferInsert> = {};
+    if (patch.active !== undefined) set.active = patch.active;
+    if (patch.channel !== undefined) set.channel = patch.channel;
+    if (patch.platforms !== undefined) set.platforms = patch.platforms;
+    if (patch.link !== undefined) set.link = patch.link;
+    if (patch.comment !== undefined) set.comment = patch.comment;
+    if (Object.keys(set).length === 0) return current;
 
-        const [row] = await tx.update(bundles).set(set).where(eq(bundles.id, id)).returning();
-        return row;
-    });
+    const [row] = await db.update(bundles).set(set).where(eq(bundles.id, id)).returning();
+    return row;
 }
 
 /**
  * Restore an auto-disabled (or manually-disabled) bundle to active rotation.
  * One-click recovery from a false-positive auto-disable: flips state back to
- * 'active' AND active=true (deactivating any sibling bundle in the same
- * channel, mirroring commitBundle's atomic activation), and stamps
- * `blacklist_reset_at = now()` so devices that previously failed this bundle
- * get another shot at it via the /updates NOT EXISTS gate.
+ * 'active' AND active=true, and stamps `blacklist_reset_at = now()` so devices
+ * that previously failed this bundle get another shot at it via the /updates
+ * NOT EXISTS gate. Sibling bundles are left untouched — guards in /updates
+ * pick the right active bundle per device.
  */
 export async function reactivateBundle(db: Db, id: number): Promise<Bundle> {
     const current = await getBundle(db, id);
     if (current.state === 'active' && current.active) return current;
 
-    return db.transaction(async (tx) => {
-        await tx
-            .update(bundles)
-            .set({ active: false })
-            .where(and(eq(bundles.appId, current.appId), eq(bundles.channel, current.channel), ne(bundles.id, id)));
-        const [row] = await tx
-            .update(bundles)
-            .set({ state: 'active', active: true, blacklistResetAt: sql`now()` })
-            .where(eq(bundles.id, id))
-            .returning();
-        return row;
-    });
+    const [row] = await db
+        .update(bundles)
+        .set({ state: 'active', active: true, blacklistResetAt: sql`now()` })
+        .where(eq(bundles.id, id))
+        .returning();
+    return row;
 }
 
 export type DeleteBundleResult = Bundle | { deleted: number; purged: true };

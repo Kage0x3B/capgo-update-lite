@@ -28,7 +28,7 @@ export const PATCH = defineRoute(
             operationId: 'patchBundle',
             summary: 'Update a bundle',
             description:
-                'Patch activation, channel, platforms, link, or comment. Activating a bundle atomically deactivates siblings in the same (app_id, channel).',
+                'Patch activation, channel, platforms, link, or comment. Multiple bundles may be active on the same (app_id, channel) — the /updates resolver picks the newest one each device qualifies for, so siblings are not auto-deactivated.',
             tags: ['admin']
         }
     },
