@@ -14,6 +14,13 @@ concurrency:
 jobs:
     check:
         runs-on: ubuntu-latest
+        # PRIVATE_ADMIN_TOKEN is consumed via $env/static/private at build time;
+        # SvelteKit only declares it in its generated types when the var is
+        # visible to vite. The value is irrelevant for type-checking — we just
+        # need the symbol to exist. The real production token is configured
+        # separately as a Cloudflare build-time variable.
+        env:
+            PRIVATE_ADMIN_TOKEN: ci-typecheck-placeholder
         steps:
             - uses: actions/checkout@v4
 
@@ -28,6 +35,11 @@ jobs:
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
+
+            # Generate worker-configuration.d.ts (gitignored) so svelte-check
+            # can resolve the `Hyperdrive`, `R2Bucket`, etc. ambient types.
+            - name: Generate Cloudflare worker types
+              run: pnpm -F capgo-update-lite cf-typegen
 
             - name: Format check
               run: pnpm format:check
