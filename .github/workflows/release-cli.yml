@@ -62,12 +62,21 @@ jobs:
                       exit 1
                   fi
 
+            # Trusted Publishing requires npm ≥ 11.5.1, and pnpm 10.x's
+            # publish wrapper does not currently trigger the OIDC handshake
+            # on its own (we tested — it errors with ENEEDAUTH). Bump npm
+            # globally and let it do the publish; the rest of the workflow
+            # stays on pnpm.
+            - name: Upgrade npm to a Trusted-Publishing-aware release
+              run: npm install -g npm@latest
+
             - name: Publish to npm
-              # OIDC Trusted Publishing — pnpm 10.5+ exchanges the workflow's
-              # OIDC token for a short-lived publish credential, no NPM_TOKEN.
-              # --no-git-checks: pnpm refuses to publish from a detached HEAD
-              # without this; tag pushes are always detached.
-              run: pnpm -F capgo-update-lite-cli publish --provenance --access public --no-git-checks
+              # OIDC Trusted Publishing — npm exchanges the workflow's OIDC
+              # token (id-token: write) for a short-lived publish credential.
+              # No NPM_TOKEN, no .npmrc auth setup. tsdown already produced
+              # dist/ via the pnpm Build step above.
+              working-directory: packages/cli
+              run: npm publish --provenance --access public
 
             # Mirror the annotated-tag message into a GitHub Release page for
             # the repo. Only runs when npm publish succeeded (default
