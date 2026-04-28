@@ -1,5 +1,15 @@
 import type { Command } from 'commander';
-import { apiJson, PLATFORMS, type BundlePurgeResponse, type BundleRow, type Platform } from '../api.js';
+import chalk from 'chalk';
+import {
+    apiJson,
+    PLATFORMS,
+    type AppNeedingAttention,
+    type BundleHealthRow,
+    type BundleHealthSeverity,
+    type BundlePurgeResponse,
+    type BundleRow,
+    type Platform
+} from '../api.js';
 import { resolveConfig } from '../config.js';
 import { done, enterJsonMode, fail, kv, printJson, start, table } from '../output.js';
 import { invalidateMatching } from '../completion-cache.js';
@@ -136,7 +146,7 @@ export function registerBundles(program: Command): void {
 
     bundles
         .command('edit <bundle-id>')
-        .description('Patch a bundle\'s channel, link, comment, or platforms (no re-upload).')
+        .description("Patch a bundle's channel, link, comment, or platforms (no re-upload).")
         .option('-c, --channel <name>', 'Move the bundle to this channel')
         .option('--link <url>', 'Set release notes URL (use "null" to clear)')
         .option('--comment <text>', 'Set operator comment (use "null" to clear)')
@@ -237,4 +247,141 @@ export function registerBundles(program: Command): void {
             await completionCache.invalidateBundlesFor(app, ch).catch(() => {});
             done(`Activated ${updated.appId}@${updated.version} on "${updated.channel}" (bundle_id=${updated.id})`);
         });
+
+    bundles
+        .command('health [app-id]')
+        .description(
+            'Show the broken-bundle severity ladder. With <app-id>, lists each bundle of that app; without, summarises apps that need attention.'
+        )
+        .option('--json', 'Output raw JSON instead of a table')
+        .action(async function action(this: Command, appIdArg?: string): Promise<void> {
+            const { json } = this.opts<{ json?: boolean }>();
+            if (json) enterJsonMode();
+            if (appIdArg !== undefined) {
+                const err = appIdError(appIdArg);
+                if (err) fail(err);
+            }
+            const cfg = await resolveConfig(this, ['serverUrl', 'adminToken']);
+            const ctx = { serverUrl: cfg.serverUrl!, adminToken: cfg.adminToken };
+
+            if (appIdArg === undefined) {
+                const rows = await apiJson<AppNeedingAttention[]>(ctx, 'GET', '/admin/bundle-health');
+                if (json) {
+                    printJson(rows);
+                    return;
+                }
+                start('capgo-update-lite bundles health');
+                if (rows.length === 0) {
+                    done('All apps healthy — no bundles need attention.');
+                    return;
+                }
+                table(
+                    ['APP', 'NAME', 'AUTO-DISABLED', 'AT-RISK', 'WARN', 'NOISY'],
+                    rows.map((r) => [
+                        r.appId,
+                        r.appName,
+                        formatCount(r.autoDisabled, 'auto_disabled'),
+                        formatCount(r.atRisk, 'at_risk'),
+                        formatCount(r.warnings, 'warning'),
+                        formatCount(r.noisy, 'noisy')
+                    ])
+                );
+                done(`${rows.length} app${rows.length === 1 ? '' : 's'} need${rows.length === 1 ? 's' : ''} attention`);
+                return;
+            }
+
+            const rows = await apiJson<BundleHealthRow[]>(
+                ctx,
+                'GET',
+                `/admin/apps/${encodeURIComponent(appIdArg)}/bundle-health`
+            );
+            if (json) {
+                printJson(rows);
+                return;
+            }
+            start(`capgo-update-lite bundles health ${appIdArg}`);
+            if (rows.length === 0) {
+                done(`No bundles registered for ${appIdArg}.`);
+                return;
+            }
+            // Surface the active thresholds once at the top — the per-row
+            // severity is a function of these, so showing them prevents the
+            // "why is 19% only a warning" question.
+            const thr = rows[0].thresholds;
+            kv(
+                'thresholds',
+                `min_devices=${thr.minDevices}, warn=${thr.warnRate.toFixed(2)}, risk=${thr.riskRate.toFixed(2)}, disable=${thr.disableRate.toFixed(2)}`
+            );
+            table(
+                ['ID', 'VERSION', 'CHANNEL', 'STATE', 'ACTIVE', 'SEVERITY', 'FAIL/ATTEMPT', 'RATE'],
+                rows.map((r) => [
+                    String(r.bundleId),
+                    r.version,
+                    r.channel,
+                    r.state,
+                    r.active ? 'yes' : 'no',
+                    formatSeverity(r.severity),
+                    `${r.failedDevices}/${r.attemptedDevices}`,
+                    r.attemptedDevices === 0 ? '—' : (r.failRate * 100).toFixed(1) + '%'
+                ])
+            );
+            const flagged = rows.filter(
+                (r) => r.severity !== 'healthy' && r.severity !== 'manually_disabled'
+            ).length;
+            done(
+                flagged === 0
+                    ? `${rows.length} bundle${rows.length === 1 ? '' : 's'}, all healthy`
+                    : `${flagged}/${rows.length} bundle${rows.length === 1 ? '' : 's'} flagged`
+            );
+        });
+
+    bundles
+        .command('reactivate <bundle-id>')
+        .description(
+            'Restore an auto-disabled bundle: flip state=active + active=true, deactivate siblings, reset the per-device blacklist gate.'
+        )
+        .action(async function action(this: Command, bundleIdArg: string): Promise<void> {
+            if (!isCanonicalBundleId(bundleIdArg)) {
+                fail(`bundle-id must be a positive integer with no leading zeros, got "${bundleIdArg}"`);
+            }
+            const bundleId = Number(bundleIdArg);
+            const cfg = await resolveConfig(this, ['serverUrl', 'adminToken']);
+            start(`capgo-update-lite bundles reactivate ${bundleId}`);
+            const row = await apiJson<BundleRow>(
+                { serverUrl: cfg.serverUrl!, adminToken: cfg.adminToken },
+                'POST',
+                `/admin/bundles/${bundleId}/reactivate`
+            );
+            await invalidateMatching('bundles-').catch(() => {});
+            done(`Reactivated ${row.appId}@${row.version} on "${row.channel}" (bundle_id=${row.id})`);
+        });
+}
+
+function colorBySeverity(severity: BundleHealthSeverity, text: string): string {
+    // Stick to single-SGR colours so every cell carries the same ANSI overhead;
+    // table() pads on byte length, so chained styles (chalk.bold.red) or RGB
+    // hexes would knock columns out of alignment.
+    switch (severity) {
+        case 'healthy':
+            return chalk.green(text);
+        case 'noisy':
+            return chalk.dim(text);
+        case 'warning':
+            return chalk.yellow(text);
+        case 'at_risk':
+            return chalk.red(text);
+        case 'auto_disabled':
+            return chalk.redBright(text);
+        case 'manually_disabled':
+            return chalk.dim(text);
+    }
+}
+
+function formatSeverity(severity: BundleHealthSeverity): string {
+    return colorBySeverity(severity, severity);
+}
+
+function formatCount(n: number, severity: BundleHealthSeverity): string {
+    if (n === 0) return chalk.dim('0');
+    return colorBySeverity(severity, String(n));
 }

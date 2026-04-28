@@ -68,10 +68,7 @@ export async function readAndroidVersionName(projectRoot: string): Promise<strin
  * For richer error reporting prefer `resolveIosShortVersion` directly — it
  * returns the layer trace.
  */
-export async function readIosShortVersion(
-    projectRoot: string,
-    options: ResolveOptions = {}
-): Promise<string | null> {
+export async function readIosShortVersion(projectRoot: string, options: ResolveOptions = {}): Promise<string | null> {
     const result = await resolveIosShortVersion(projectRoot, options);
     if (!result) return null;
     return result.ok ? result.version : result.partial;

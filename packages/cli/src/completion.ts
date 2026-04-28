@@ -46,10 +46,7 @@ export function isCompletionCallback(argv: readonly string[] = process.argv): bo
     return dashIdx !== -1 && dashIdx > completeIdx;
 }
 
-export function dispatchCompletionCallback(
-    program: CommanderCommand,
-    argv: readonly string[] = process.argv
-): void {
+export function dispatchCompletionCallback(program: CommanderCommand, argv: readonly string[] = process.argv): void {
     // tab.commander.mjs replaces program.parse with a function that detects
     // `complete --` and emits completions to stdout. We call the patched
     // synchronous parse directly; tab's handlers may be async but the lib
@@ -103,6 +100,7 @@ export function registerCompletions(program: CommanderCommand): RootCommand {
     // Command instances exposed via completion.commands.
     attachPositional(completion, 'apps get', 'app-id', completeAppIdArg);
     attachPositional(completion, 'apps set-policy', 'app-id', completeAppIdArg);
+    attachPositional(completion, 'bundles health', 'app-id', completeAppIdArg);
     attachPositional(completion, 'bundles promote', 'version', completeBundleVersion);
 
     return completion;
@@ -263,8 +261,7 @@ function attachOption(
     optionName: string,
     handler: (complete: CompleteFn, options: Map<string, Option>) => void | Promise<void>
 ): void {
-    const cmd: TabCommand | undefined =
-        commandPath === '' ? completion : completion.commands.get(commandPath);
+    const cmd: TabCommand | undefined = commandPath === '' ? completion : completion.commands.get(commandPath);
     if (!cmd) return;
     const opt = cmd.options.get(optionName);
     if (!opt) return;

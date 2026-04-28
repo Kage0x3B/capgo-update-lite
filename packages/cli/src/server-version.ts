@@ -12,7 +12,7 @@
 
 import { cmpSemver, parseSemver } from './semver.js';
 
-export const MIN_SERVER_VERSION = '0.3.0';
+export const MIN_SERVER_VERSION = '0.4.0';
 
 export type CompatStatus = 'ok' | 'missing' | 'unparseable' | 'too-old';
 

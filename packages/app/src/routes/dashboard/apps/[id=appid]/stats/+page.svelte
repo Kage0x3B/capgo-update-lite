@@ -2,6 +2,7 @@
     import { page } from '$app/state';
     import AdoptionChart from '$lib/components/dashboard/AdoptionChart.svelte';
     import AutoRollbacksList from '$lib/components/dashboard/AutoRollbacksList.svelte';
+    import BundleHealthTable from '$lib/components/dashboard/BundleHealthTable.svelte';
     import FailureBreakdown from '$lib/components/dashboard/FailureBreakdown.svelte';
     import KpiStrip from '$lib/components/dashboard/KpiStrip.svelte';
     import PlatformDonut from '$lib/components/dashboard/PlatformDonut.svelte';
@@ -11,48 +12,29 @@
     import TimeWindow from '$lib/components/dashboard/TimeWindow.svelte';
     import UpdateCheckSparkline from '$lib/components/dashboard/UpdateCheckSparkline.svelte';
     import type { DashboardWindow } from '$lib/server/validation/analytics.js';
+    import { getBundleHealth } from '../bundles.remote';
     import { getAppDashboard } from './stats.remote';
 
     const appId = $derived(page.params.id ?? '');
     let win = $state<DashboardWindow>('7d');
     const data = $derived(await getAppDashboard({ window: win, app_id: appId }));
+    const health = $derived(await getBundleHealth({ app_id: appId }));
 </script>
 
 <svelte:head>
     <title>{appId} — Stats</title>
 </svelte:head>
 
-<header class="mb-6 flex flex-wrap items-end justify-between gap-3">
-    <div class="flex-1">
-        <p class="text-surface-600-400 text-xs">
-            <a class="anchor" href="/dashboard/apps">← All apps</a>
-        </p>
-        <h1 class="h2"><code>{appId}</code></h1>
-        <nav class="border-surface-200-800 mt-4 flex gap-5 border-b text-sm">
-            <a
-                href="/dashboard/apps/{appId}"
-                class="text-surface-600-400 hover:text-surface-950-50 -mb-px border-b-2 border-transparent px-1 pb-2"
-            >
-                Bundles
-            </a>
-            <span
-                class="border-primary-500 text-primary-500 -mb-px border-b-2 px-1 pb-2 font-semibold"
-            >
-                Stats
-            </span>
-            <a
-                href="/dashboard/apps/{appId}/settings"
-                class="text-surface-600-400 hover:text-surface-950-50 -mb-px border-b-2 border-transparent px-1 pb-2"
-            >
-                Settings
-            </a>
-        </nav>
-    </div>
+<div class="mb-6 flex justify-end">
     <TimeWindow bind:value={win} />
-</header>
+</div>
 
 <section class="mb-6">
     <KpiStrip data={data.kpis} />
+</section>
+
+<section class="mb-6">
+    <BundleHealthTable rows={health} />
 </section>
 
 <section class="mb-6 grid gap-4 lg:grid-cols-3">
@@ -62,13 +44,15 @@
     <FailureBreakdown data={data.failures} />
 </section>
 
-<section class="mb-6 grid gap-4 lg:grid-cols-2">
+<section class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
     <PlatformDonut data={data.platform} />
     <PluginVersionBars data={data.plugins} />
+    <div class="sm:col-span-2">
+        <RolloutFunnel data={data.funnel} />
+    </div>
 </section>
 
-<section class="mb-6 grid gap-4 lg:grid-cols-2">
-    <RolloutFunnel data={data.funnel} />
+<section class="mb-6">
     <AutoRollbacksList data={data.rollbacks} />
 </section>
 

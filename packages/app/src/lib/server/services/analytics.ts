@@ -22,6 +22,25 @@ const FAILURE_ACTIONS = [
     'download_manifest_brotli_fail'
 ] as const;
 
+/**
+ * Subset of FAILURE_ACTIONS that the bundle is responsible for (the bundle
+ * itself is broken/corrupt). Excludes network failures (`download_fail`) and
+ * device-environment failures (`low_mem_fail`, `*_path_fail`,
+ * `download_manifest_*`) which are not the bundle's fault.
+ *
+ * Used by services/bundleHealth.ts and routes/{stats,updates}/+server.ts. The
+ * partial-index predicates in drizzle/0003_graceful_reptil.sql MUST stay in
+ * sync with this list — if you change one, change them all.
+ */
+export const BUNDLE_BREAKING_ACTIONS = [
+    'set_fail',
+    'update_fail',
+    'decrypt_fail',
+    'checksum_fail',
+    'unzip_fail'
+] as const;
+export type BundleBreakingAction = (typeof BUNDLE_BREAKING_ACTIONS)[number];
+
 /** All events emitted as a device resolves an update — used for the rollout funnel. */
 const FUNNEL_ACTIONS = {
     downloadStart: 'download_zip_start',
@@ -53,6 +72,7 @@ export type Kpis = {
     failureRate: number;
     failureRatePrev: number;
     pendingFailedBundles: number;
+    currentBundle: { version: string; releasedAt: string | null } | null;
 };
 
 export async function kpisForWindow(db: Db, f: AnalyticsFilters): Promise<Kpis> {
@@ -72,7 +92,7 @@ export async function kpisForWindow(db: Db, f: AnalyticsFilters): Promise<Kpis> 
         return row;
     }
 
-    const [cur, prior, pendingFailed] = await Promise.all([
+    const [cur, prior, pendingFailed, current] = await Promise.all([
         windowStats(f),
         windowStats(prev),
         db
@@ -81,7 +101,8 @@ export async function kpisForWindow(db: Db, f: AnalyticsFilters): Promise<Kpis> 
             .where(
                 and(f.app_id ? eq(bundles.appId, f.app_id) : undefined, sql`${bundles.state} IN ('pending','failed')`)
             )
-            .then((r) => r[0]?.c ?? 0)
+            .then((r) => r[0]?.c ?? 0),
+        currentActiveBundle(db, f.app_id)
     ]);
 
     return {
@@ -91,7 +112,28 @@ export async function kpisForWindow(db: Db, f: AnalyticsFilters): Promise<Kpis> 
         updatesDeliveredPrev: prior.updatesDelivered ?? 0,
         failureRate: cur.totalOutcomes > 0 ? cur.failures / cur.totalOutcomes : 0,
         failureRatePrev: prior.totalOutcomes > 0 ? prior.failures / prior.totalOutcomes : 0,
-        pendingFailedBundles: pendingFailed
+        pendingFailedBundles: pendingFailed,
+        currentBundle: current
+    };
+}
+
+/** Most-recently-released bundle that is `active=true` and `state='active'`. */
+async function currentActiveBundle(
+    db: Db,
+    app_id?: string
+): Promise<{ version: string; releasedAt: string | null } | null> {
+    const [row] = await db
+        .select({ version: bundles.version, releasedAt: bundles.releasedAt })
+        .from(bundles)
+        .where(
+            and(app_id ? eq(bundles.appId, app_id) : undefined, eq(bundles.active, true), eq(bundles.state, 'active'))
+        )
+        .orderBy(sql`${bundles.releasedAt} DESC NULLS LAST`)
+        .limit(1);
+    if (!row) return null;
+    return {
+        version: row.version,
+        releasedAt: row.releasedAt ? row.releasedAt.toISOString() : null
     };
 }
 
@@ -121,59 +163,111 @@ export async function adoptionByVersion(db: Db, f: AnalyticsFilters): Promise<Ad
 
 // --- 3. Rollout funnel -------------------------------------------------------
 
-export type FunnelStage = { stage: string; devices: number };
+export type FunnelStage = { action: string; devices: number };
 
-export async function rolloutFunnel(db: Db, f: AnalyticsFilters): Promise<FunnelStage[]> {
-    // Target = most-recent active bundle for (app, channel='production').
-    const [target] = await db
-        .select({ version: bundles.version })
-        .from(bundles)
-        .where(
-            and(
-                f.app_id ? eq(bundles.appId, f.app_id) : undefined,
-                eq(bundles.active, true),
-                eq(bundles.state, 'active')
-            )
-        )
-        .orderBy(sql`${bundles.releasedAt} DESC NULLS LAST`)
-        .limit(1);
+export type RolloutFunnel = {
+    /** Currently-active bundle this funnel is measured against. `null` if none. */
+    target: { version: string } | null;
+    /**
+     * Rolling estimate of installed devices: distinct device_ids that emitted
+     * any event in the last 7 days, regardless of the dashboard window. Used
+     * to derive the "haven't started this update yet" count.
+     */
+    activeDevices: number;
+    /**
+     * Each stage holds the raw stats action code (e.g. `download_zip_start`) so
+     * the UI can map it through `actionLabel` consistently.
+     */
+    stages: FunnelStage[];
+};
 
-    if (!target) return [];
+export async function rolloutFunnel(db: Db, f: AnalyticsFilters): Promise<RolloutFunnel> {
+    const target = await currentActiveBundle(db, f.app_id);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const [row] = await db
-        .select({
-            downloadStart: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId}) FILTER (WHERE ${statsEvents.action} = ${FUNNEL_ACTIONS.downloadStart})::int`,
-            downloadComplete: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId}) FILTER (WHERE ${statsEvents.action} = ${FUNNEL_ACTIONS.downloadComplete})::int`,
-            set: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId}) FILTER (WHERE ${statsEvents.action} = ${FUNNEL_ACTIONS.set})::int`,
-            foreground: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId}) FILTER (WHERE ${statsEvents.action} = ${FUNNEL_ACTIONS.foreground})::int`
-        })
-        .from(statsEvents)
-        .where(and(windowFilter(f), eq(statsEvents.versionName, target.version)));
+    const activeFilter = and(
+        gte(statsEvents.receivedAt, sevenDaysAgo),
+        f.app_id ? eq(statsEvents.appId, f.app_id) : undefined
+    );
 
-    return [
-        { stage: 'download start', devices: row?.downloadStart ?? 0 },
-        { stage: 'download complete', devices: row?.downloadComplete ?? 0 },
-        { stage: 'set', devices: row?.set ?? 0 },
-        { stage: 'foreground', devices: row?.foreground ?? 0 }
-    ];
+    if (!target) {
+        const [activeRow] = await db
+            .select({ c: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId})::int` })
+            .from(statsEvents)
+            .where(activeFilter);
+        return { target: null, activeDevices: activeRow?.c ?? 0, stages: [] };
+    }
+
+    const [row, activeRow] = await Promise.all([
+        db
+            .select({
+                downloadStart: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId}) FILTER (WHERE ${statsEvents.action} = ${FUNNEL_ACTIONS.downloadStart})::int`,
+                downloadComplete: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId}) FILTER (WHERE ${statsEvents.action} = ${FUNNEL_ACTIONS.downloadComplete})::int`,
+                set: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId}) FILTER (WHERE ${statsEvents.action} = ${FUNNEL_ACTIONS.set})::int`,
+                foreground: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId}) FILTER (WHERE ${statsEvents.action} = ${FUNNEL_ACTIONS.foreground})::int`
+            })
+            .from(statsEvents)
+            .where(and(windowFilter(f), eq(statsEvents.versionName, target.version)))
+            .then((r) => r[0]),
+        db
+            .select({ c: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId})::int` })
+            .from(statsEvents)
+            .where(activeFilter)
+            .then((r) => r[0])
+    ]);
+
+    return {
+        target: { version: target.version },
+        activeDevices: activeRow?.c ?? 0,
+        stages: [
+            { action: FUNNEL_ACTIONS.downloadStart, devices: row?.downloadStart ?? 0 },
+            { action: FUNNEL_ACTIONS.downloadComplete, devices: row?.downloadComplete ?? 0 },
+            { action: FUNNEL_ACTIONS.set, devices: row?.set ?? 0 },
+            { action: FUNNEL_ACTIONS.foreground, devices: row?.foreground ?? 0 }
+        ]
+    };
 }
 
 // --- 4. Failure breakdown ----------------------------------------------------
 
-export type FailureRow = { action: string; count: number };
+/** Per-version failure totals plus the failure actions reported against that version. */
+export type FailureRow = {
+    version: string;
+    count: number;
+    actions: { action: string; count: number }[];
+};
+
+const FAILURE_ACTIONS_PER_VERSION = 8;
 
 export async function failureBreakdown(db: Db, f: AnalyticsFilters): Promise<FailureRow[]> {
     const failureList = sql.raw(FAILURE_ACTIONS.map((a) => `'${a}'`).join(','));
     const rows = await db
         .select({
+            version: sql<string>`COALESCE(${statsEvents.versionName}, 'unknown')`.as('version'),
             action: sql<string>`${statsEvents.action}`.as('action'),
             count: sql<number>`COUNT(*)::int`.as('count')
         })
         .from(statsEvents)
         .where(and(windowFilter(f), sql`${statsEvents.action} IN (${failureList})`))
-        .groupBy(statsEvents.action)
+        .groupBy(sql`1`, statsEvents.action)
         .orderBy(sql`COUNT(*) DESC`);
-    return rows.map((r) => ({ action: r.action, count: r.count }));
+
+    const byVersion = new Map<string, FailureRow>();
+    for (const r of rows) {
+        let row = byVersion.get(r.version);
+        if (!row) {
+            row = { version: r.version, count: 0, actions: [] };
+            byVersion.set(r.version, row);
+        }
+        row.count += r.count;
+        row.actions.push({ action: r.action, count: r.count });
+    }
+    return [...byVersion.values()]
+        .map((r) => ({
+            ...r,
+            actions: r.actions.sort((a, b) => b.count - a.count).slice(0, FAILURE_ACTIONS_PER_VERSION)
+        }))
+        .sort((a, b) => b.count - a.count);
 }
 
 // --- 5. Platform split -------------------------------------------------------

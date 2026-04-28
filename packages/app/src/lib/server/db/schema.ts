@@ -3,9 +3,11 @@ import {
     bigserial,
     boolean,
     index,
+    integer,
     jsonb,
     pgEnum,
     pgTable,
+    real,
     serial,
     text,
     timestamp,
@@ -28,6 +30,18 @@ export const apps = pgTable('apps', {
     // Minimum @capgo/capacitor-updater plugin version the server will serve.
     // NULL = no floor. Semver string (e.g. '6.25.0').
     minPluginVersion: text('min_plugin_version'),
+    // Per-app override for the broken-bundle auto-disable noise floor: a bundle
+    // must have been tried by at least this many unique devices before its fail
+    // rate is allowed to trip the kill-switch. NULL falls back to env / constant.
+    // 0 disables auto-disable for this app.
+    failMinDevices: integer('fail_min_devices'),
+    // Per-app overrides for the three fail-rate thresholds the dashboard uses
+    // (0..1, fraction of unique devices that hit a bundle-integrity failure).
+    // Order is enforced: warn <= risk <= disable. NULL on any falls back to
+    // env / constant. 0 on disable disables auto-disable for this app.
+    failWarnRate: real('fail_warn_rate'),
+    failRiskRate: real('fail_risk_rate'),
+    failRateThreshold: real('fail_rate_threshold'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 });
 
@@ -62,6 +76,12 @@ export const bundles = pgTable(
         active: boolean('active').notNull().default(false),
         state: text('state').notNull().default('pending'),
         releasedAt: timestamp('released_at', { withTimezone: true }),
+        // Cutoff for the per-device blacklist gate in /updates: stats_events
+        // before this timestamp don't count toward the NOT EXISTS check.
+        // Set to now() when an operator reactivates an auto-disabled bundle so
+        // previously-failed devices get to try the (presumably-fixed) bundle
+        // again, without losing the underlying event history.
+        blacklistResetAt: timestamp('blacklist_reset_at', { withTimezone: true }),
         createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
     },
     (t) => [

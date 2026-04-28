@@ -1,5 +1,6 @@
 <script lang="ts">
     import AutoRollbacksList from '$lib/components/dashboard/AutoRollbacksList.svelte';
+    import BundleHealthBanner from '$lib/components/dashboard/BundleHealthBanner.svelte';
     import BundleStateSummary from '$lib/components/dashboard/BundleStateSummary.svelte';
     import PlatformDonut from '$lib/components/dashboard/PlatformDonut.svelte';
     import RecentActivity from '$lib/components/dashboard/RecentActivity.svelte';
@@ -18,13 +19,19 @@
 
 <header class="mb-6 flex flex-wrap items-baseline justify-between gap-3">
     <div>
-        <h1 class="h2">Overview</h1>
+        <h1 class="h3 sm:h2">Overview</h1>
         <p class="text-surface-600-400 mt-1 text-sm">
             Cross-app health. Version-specific panels live on each app's stats page.
         </p>
     </div>
     <TimeWindow bind:value={win} />
 </header>
+
+{#if data.attention.length > 0}
+    <section class="mb-6">
+        <BundleHealthBanner rows={data.attention} />
+    </section>
+{/if}
 
 <section class="mb-6">
     <BundleStateSummary data={data.bundles} />

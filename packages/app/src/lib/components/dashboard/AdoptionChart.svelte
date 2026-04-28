@@ -96,8 +96,8 @@
     });
 </script>
 
-<div class="card preset-filled-surface-100-900 p-4">
-    <div class="mb-3 flex items-baseline justify-between">
+<div class="card preset-filled-surface-100-900 p-3 sm:p-4">
+    <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 class="h5">Adoption by version</h3>
         <span class="text-surface-600-400 text-xs">Distinct devices emitting `set`</span>
     </div>

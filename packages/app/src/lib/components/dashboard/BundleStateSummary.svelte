@@ -15,12 +15,43 @@
     });
 </script>
 
-<div class="card preset-filled-surface-100-900 p-4">
+<div class="card preset-filled-surface-100-900 p-3 sm:p-4">
     <h3 class="h5 mb-3">Bundle pipeline</h3>
     {#if pivoted.length === 0}
         <p class="text-surface-600-400 py-4 text-sm">No bundles yet.</p>
     {:else}
-        <div class="table-wrap">
+        <!-- Mobile: compact card list -->
+        <ul class="divide-surface-200-800 divide-y sm:hidden">
+            {#each pivoted as row}
+                <li class="space-y-1 py-2">
+                    <code class="text-xs break-all">{row.app}</code>
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums">
+                        <span class="text-surface-600-400">active <span class="text-surface-950-50 font-medium">{row.active}</span></span>
+                        <span class="text-surface-600-400">pending
+                            {#if row.pending > 0}
+                                <span class="badge preset-tonal-warning">{row.pending}</span>
+                            {:else}
+                                <span class="text-surface-950-50 font-medium">0</span>
+                            {/if}
+                        </span>
+                        <span class="text-surface-600-400">failed
+                            {#if row.failed > 0}
+                                <span class="badge preset-tonal-error">{row.failed}</span>
+                            {:else}
+                                <span class="text-surface-950-50 font-medium">0</span>
+                            {/if}
+                        </span>
+                        <span class="ml-auto flex shrink-0 gap-3">
+                            <a class="anchor" href="/dashboard/apps/{row.app}">Bundles</a>
+                            <a class="anchor" href="/dashboard/apps/{row.app}/stats">Stats</a>
+                        </span>
+                    </div>
+                </li>
+            {/each}
+        </ul>
+
+        <!-- Desktop: table -->
+        <div class="table-wrap hidden sm:block">
             <table class="table text-sm">
                 <thead>
                     <tr>

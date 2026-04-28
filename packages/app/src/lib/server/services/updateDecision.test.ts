@@ -19,6 +19,10 @@ function makeApp(overrides: Partial<App> = {}): App {
         disableAutoUpdate: 'none',
         disableAutoUpdateUnderNative: true,
         minPluginVersion: null,
+        failMinDevices: null,
+        failWarnRate: null,
+        failRiskRate: null,
+        failRateThreshold: null,
         createdAt: new Date('2026-01-01T00:00:00Z'),
         ...overrides
     };
@@ -42,6 +46,7 @@ function makeBundle(overrides: Partial<Bundle> = {}): Bundle {
         active: true,
         state: 'active',
         releasedAt: new Date('2026-02-01T00:00:00Z'),
+        blacklistResetAt: null,
         createdAt: new Date('2026-02-01T00:00:00Z'),
         ...overrides
     };
@@ -62,11 +67,13 @@ function makeBody(overrides: Partial<UpdatesRequest> = {}): UpdatesRequest {
     };
 }
 
-function makeFixtures(partial: {
-    app?: Partial<App>;
-    bundle?: Partial<Bundle>;
-    body?: Partial<UpdatesRequest>;
-} = {}): EvaluateUpdateInput {
+function makeFixtures(
+    partial: {
+        app?: Partial<App>;
+        bundle?: Partial<Bundle>;
+        body?: Partial<UpdatesRequest>;
+    } = {}
+): EvaluateUpdateInput {
     const body = makeBody(partial.body);
     const pluginSv = parseSemver(body.plugin_version);
     const buildSv = parseSemver(body.version_build);

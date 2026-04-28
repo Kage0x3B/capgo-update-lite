@@ -61,11 +61,7 @@ export async function initBundle(db: Db, env: R2Env, input: InitBundleInput): Pr
         throw new ApiError(400, 'invalid_request', `version is not valid semver: ${input.version}`);
     }
     if (!isValidSemver(input.min_android_build)) {
-        throw new ApiError(
-            400,
-            'invalid_request',
-            `min_android_build is not valid semver: ${input.min_android_build}`
-        );
+        throw new ApiError(400, 'invalid_request', `min_android_build is not valid semver: ${input.min_android_build}`);
     }
     if (!isValidSemver(input.min_ios_build)) {
         throw new ApiError(400, 'invalid_request', `min_ios_build is not valid semver: ${input.min_ios_build}`);
@@ -210,6 +206,32 @@ export async function patchBundle(db: Db, id: number, patch: PatchBundleInput): 
         if (Object.keys(set).length === 0) return current;
 
         const [row] = await tx.update(bundles).set(set).where(eq(bundles.id, id)).returning();
+        return row;
+    });
+}
+
+/**
+ * Restore an auto-disabled (or manually-disabled) bundle to active rotation.
+ * One-click recovery from a false-positive auto-disable: flips state back to
+ * 'active' AND active=true (deactivating any sibling bundle in the same
+ * channel, mirroring commitBundle's atomic activation), and stamps
+ * `blacklist_reset_at = now()` so devices that previously failed this bundle
+ * get another shot at it via the /updates NOT EXISTS gate.
+ */
+export async function reactivateBundle(db: Db, id: number): Promise<Bundle> {
+    const current = await getBundle(db, id);
+    if (current.state === 'active' && current.active) return current;
+
+    return db.transaction(async (tx) => {
+        await tx
+            .update(bundles)
+            .set({ active: false })
+            .where(and(eq(bundles.appId, current.appId), eq(bundles.channel, current.channel), ne(bundles.id, id)));
+        const [row] = await tx
+            .update(bundles)
+            .set({ state: 'active', active: true, blacklistResetAt: sql`now()` })
+            .where(eq(bundles.id, id))
+            .returning();
         return row;
     });
 }

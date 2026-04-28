@@ -32,9 +32,7 @@ export type DetectedAppId = {
     source: string;
 };
 
-export async function readAppIdFromCapacitorConfig(
-    cwd: string = process.cwd()
-): Promise<DetectedAppId | null> {
+export async function readAppIdFromCapacitorConfig(cwd: string = process.cwd()): Promise<DetectedAppId | null> {
     for (const filename of CANDIDATES) {
         const abs = path.resolve(cwd, filename);
         if (!existsSync(abs)) continue;
@@ -44,8 +42,7 @@ export async function readAppIdFromCapacitorConfig(
         } catch {
             continue;
         }
-        const value =
-            (filename.endsWith('.json') ? extractFromJson(raw) : null) ?? extractFromCode(raw);
+        const value = (filename.endsWith('.json') ? extractFromJson(raw) : null) ?? extractFromCode(raw);
         if (value) {
             return { appId: value, source: path.relative(cwd, abs) || filename };
         }

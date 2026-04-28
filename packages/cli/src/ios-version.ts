@@ -83,9 +83,7 @@ export async function resolveIosShortVersion(
         releaseConfigs = pickReleaseConfigs(configs);
         pbxprojSettings = mergeBuildSettings(releaseConfigs);
         const next = expand(value, pbxprojSettings);
-        const configNames = releaseConfigs.length
-            ? releaseConfigs.map((c) => c.name).join(',')
-            : '(none)';
+        const configNames = releaseConfigs.length ? releaseConfigs.map((c) => c.name).join(',') : '(none)';
         trace.push({
             layer: 'pbxproj',
             detail: `${path.basename(pbxprojPath)} configs=[${configNames}] → ${next}`
@@ -201,9 +199,7 @@ export function parseBuildConfigurations(pbxproj: string): BuildConfig[] {
         const body = pbxproj.slice(openIdx + 1, closeIdx);
         const nameMatch = body.match(/\bname\s*=\s*(?:"([^"]+)"|([A-Za-z0-9_-]+))\s*;/);
         const name = (nameMatch?.[1] ?? nameMatch?.[2] ?? '').trim();
-        const baseRefComment = body.match(
-            /baseConfigurationReference\s*=\s*[A-Z0-9]+\s*\/\*\s*([^*]+?)\s*\*\//
-        )?.[1];
+        const baseRefComment = body.match(/baseConfigurationReference\s*=\s*[A-Z0-9]+\s*\/\*\s*([^*]+?)\s*\*\//)?.[1];
         const settings = extractBuildSettings(body);
         out.push({
             name,
@@ -269,7 +265,7 @@ function parseAsciiPlistAssignments(body: string): Record<string, string> {
         const key = m[2];
         const quoted = m[3];
         const bare = m[4];
-        const value = quoted !== undefined ? quoted.replace(/\\"/g, '"').replace(/\\\\/g, '\\') : bare?.trim() ?? '';
+        const value = quoted !== undefined ? quoted.replace(/\\"/g, '"').replace(/\\\\/g, '\\') : (bare?.trim() ?? '');
         out[key] = value;
     }
     return out;
@@ -295,8 +291,8 @@ function mergeBuildSettings(configs: BuildConfig[]): Record<string, string> {
 
 function collectXcconfigPaths(configs: BuildConfig[], pbxprojPath: string): string[] {
     // pbxprojPath = .../ios/App/App.xcodeproj/project.pbxproj
-    const xcodeprojDir = path.dirname(pbxprojPath);            // .../App.xcodeproj
-    const projectRoot = path.dirname(xcodeprojDir);            // .../ios/App  (Capacitor convention)
+    const xcodeprojDir = path.dirname(pbxprojPath); // .../App.xcodeproj
+    const projectRoot = path.dirname(xcodeprojDir); // .../ios/App  (Capacitor convention)
     const out: string[] = [];
     const seen = new Set<string>();
     for (const c of configs) {
@@ -396,23 +392,13 @@ type XcodebuildOutcome = XcodebuildOk | XcodebuildSkip;
  * collapse into `{ ok: false, reason }` so the resolver can record the skip
  * in its trace without blowing up the publish.
  */
-async function runXcodebuildShowSettings(
-    binary: string,
-    xcodeprojDir: string
-): Promise<XcodebuildOutcome> {
+async function runXcodebuildShowSettings(binary: string, xcodeprojDir: string): Promise<XcodebuildOutcome> {
     return new Promise<XcodebuildOutcome>((resolve) => {
         let child;
         try {
             child = spawn(
                 binary,
-                [
-                    '-project',
-                    xcodeprojDir,
-                    '-showBuildSettings',
-                    '-json',
-                    '-configuration',
-                    'Release'
-                ],
+                ['-project', xcodeprojDir, '-showBuildSettings', '-json', '-configuration', 'Release'],
                 { stdio: ['ignore', 'pipe', 'pipe'] }
             );
         } catch (e) {
@@ -457,7 +443,10 @@ async function runXcodebuildShowSettings(
                 }
                 resolve({ ok: true, settings: merged });
             } catch (e) {
-                resolve({ ok: false, reason: `xcodebuild output not JSON: ${e instanceof Error ? e.message : String(e)}` });
+                resolve({
+                    ok: false,
+                    reason: `xcodebuild output not JSON: ${e instanceof Error ? e.message : String(e)}`
+                });
             }
         });
     });

@@ -6,6 +6,8 @@
 @import '@skeletonlabs/skeleton-svelte';
 @import '@skeletonlabs/skeleton/themes/cerberus';
 
+@custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
+
 /* Bordered inputs: Skeleton's default is a subtle inset ring, which is nearly
  * invisible on top of our `surface-100-900` cards. Swap in a real border so
  * form fields are obvious. Applies to input, select, textarea including the

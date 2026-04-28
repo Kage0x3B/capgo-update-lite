@@ -36,7 +36,7 @@ export function registerPublish(program: Command): void {
         .option('--app-id <id>', 'Reverse-domain app identifier (e.g. com.example.app)')
         .option(
             '--bundle-version <semver>',
-            'Bundle version (defaults to package.json version). Named to avoid commander\'s root --version flag.'
+            "Bundle version (defaults to package.json version). Named to avoid commander's root --version flag."
         )
         .option('--dist-dir <path>', 'Path to built web bundle (must contain index.html)')
         .option('-c, --channel <name>', 'Release channel (default: production)')
@@ -74,7 +74,9 @@ export function registerPublish(program: Command): void {
             const appErr = appIdError(cfg.appId);
             if (appErr) fail(appErr);
             if (!cfg.adminToken && !cfg.dryRun) {
-                fail('missing admin token (--admin-token, CAPGO_ADMIN_TOKEN, or "adminToken" in config — or use --dry-run)');
+                fail(
+                    'missing admin token (--admin-token, CAPGO_ADMIN_TOKEN, or "adminToken" in config — or use --dry-run)'
+                );
             }
 
             start(cfg.dryRun ? 'capgo-update-lite publish (dry-run)' : 'capgo-update-lite publish');

@@ -269,9 +269,7 @@ export async function preflightAppRegistered(cfg: ResolvedConfig, target: Semver
     const apps = await apiJson<AppRow[]>(ctx, 'GET', '/admin/apps');
     const app = apps.find((a) => a.id === cfg.appId);
     if (!app) {
-        fail(
-            `app "${cfg.appId}" is not registered — run \`capgo-update apps add ${cfg.appId} --name "..."\` first`
-        );
+        fail(`app "${cfg.appId}" is not registered — run \`capgo-update apps add ${cfg.appId} --name "..."\` first`);
     }
     const policyParts: string[] = [`ceiling=${app.disableAutoUpdate}`];
     if (app.disableAutoUpdateUnderNative) policyParts.push('under-native=on');
@@ -406,7 +404,9 @@ function requireDetected(value: string | null, platform: 'android' | 'ios'): str
         );
     }
     if (!parseSemver(value)) {
-        fail(`detected native ${platform} version "${value}" is not valid semver — pass --min-${platform}-build explicitly`);
+        fail(
+            `detected native ${platform} version "${value}" is not valid semver — pass --min-${platform}-build explicitly`
+        );
     }
     return value;
 }
@@ -416,9 +416,7 @@ function requireIosDetected(value: string | null, resolution: IosVersionResult |
     // exactly which layers were tried. Generic "not valid semver" sends users
     // to GitHub issues; explicit traces let them fix it locally.
     if (resolution && !resolution.ok) {
-        const traceLines = resolution.trace
-            .map((t) => `    ${t.layer.padEnd(11)} ${t.detail}`)
-            .join('\n');
+        const traceLines = resolution.trace.map((t) => `    ${t.layer.padEnd(11)} ${t.detail}`).join('\n');
         fail(
             `could not resolve iOS CFBundleShortVersionString to a literal — got "${resolution.partial}"\n` +
                 `  reason: ${resolution.reason}\n` +

@@ -2,13 +2,7 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-    DEFAULT_TTL_MS,
-    invalidate,
-    invalidateMatching,
-    readCache,
-    writeCache
-} from './completion-cache.js';
+import { DEFAULT_TTL_MS, invalidate, invalidateMatching, readCache, writeCache } from './completion-cache.js';
 
 let tmp: string;
 let originalXdg: string | undefined;
@@ -43,10 +37,7 @@ describe('writeCache + readCache', () => {
         const file = path.join(dir, 'apps.json');
         const { mkdir } = await import('node:fs/promises');
         await mkdir(dir, { recursive: true });
-        await writeFile(
-            file,
-            JSON.stringify({ fetchedAt: Date.now() - DEFAULT_TTL_MS - 1000, data: [{ id: 'old' }] })
-        );
+        await writeFile(file, JSON.stringify({ fetchedAt: Date.now() - DEFAULT_TTL_MS - 1000, data: [{ id: 'old' }] }));
         expect(await readCache('apps')).toBeNull();
     });
 

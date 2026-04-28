@@ -75,27 +75,27 @@ The bundle version defaults to `package.json`'s `version` field. If it matches t
 
 Options specific to `publish`:
 
-| Flag                            | Purpose                                                                 |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| `--app-id <id>`                 | Reverse-domain app identifier (or set in config / `CAPGO_APP_ID`)       |
-| `--bundle-version <semver>`     | Bundle version (defaults to `package.json` version)                     |
-| `--dist-dir <path>`             | Built web bundle directory (or set in config / `CAPGO_DIST_DIR`)        |
-| `-c, --channel <name>`          | Release channel (default `production`)                                  |
-| `-p, --platforms <list>`        | Comma-separated list of `ios,android,electron`                          |
-| `--link <url>`                  | Release notes / changelog URL                                           |
-| `--comment <text>`              | Operator-authored note                                                  |
-| `--activate` / `--no-activate`  | Activate on commit (default: activate)                                  |
-| `--dry-run`                     | Run preflight and build the zip, skip all server writes                 |
-| `--skip-preflight`              | Bypass preflight checks (escape hatch)                                  |
-| `--no-code-check`               | Skip the `notifyAppReady()` source scan                                 |
-| `--version-exists-ok`           | Exit 0 if the version is already published (CI-friendly)                |
-| `--package-json <path>`         | Override auto-detection of `package.json`                               |
-| `--capacitor-config <path>`     | Override auto-detection of `capacitor.config.(ts\|js\|json)`            |
-| `--min-android-build <semver>`  | Minimum native Android versionName required by this bundle              |
-| `--min-ios-build <semver>`      | Minimum native iOS CFBundleShortVersionString required by this bundle   |
-| `--auto-min-update-build`       | Inherit min builds from the previous bundle when native deps are unchanged; bump to detected native versions when they changed |
-| `--android-project <path>`      | Path to Android project root (default `./android`)                      |
-| `--ios-project <path>`          | Path to iOS project root (default `./ios`)                              |
+| Flag                           | Purpose                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `--app-id <id>`                | Reverse-domain app identifier (or set in config / `CAPGO_APP_ID`)                                                              |
+| `--bundle-version <semver>`    | Bundle version (defaults to `package.json` version)                                                                            |
+| `--dist-dir <path>`            | Built web bundle directory (or set in config / `CAPGO_DIST_DIR`)                                                               |
+| `-c, --channel <name>`         | Release channel (default `production`)                                                                                         |
+| `-p, --platforms <list>`       | Comma-separated list of `ios,android,electron`                                                                                 |
+| `--link <url>`                 | Release notes / changelog URL                                                                                                  |
+| `--comment <text>`             | Operator-authored note                                                                                                         |
+| `--activate` / `--no-activate` | Activate on commit (default: activate)                                                                                         |
+| `--dry-run`                    | Run preflight and build the zip, skip all server writes                                                                        |
+| `--skip-preflight`             | Bypass preflight checks (escape hatch)                                                                                         |
+| `--no-code-check`              | Skip the `notifyAppReady()` source scan                                                                                        |
+| `--version-exists-ok`          | Exit 0 if the version is already published (CI-friendly)                                                                       |
+| `--package-json <path>`        | Override auto-detection of `package.json`                                                                                      |
+| `--capacitor-config <path>`    | Override auto-detection of `capacitor.config.(ts\|js\|json)`                                                                   |
+| `--min-android-build <semver>` | Minimum native Android versionName required by this bundle                                                                     |
+| `--min-ios-build <semver>`     | Minimum native iOS CFBundleShortVersionString required by this bundle                                                          |
+| `--auto-min-update-build`      | Inherit min builds from the previous bundle when native deps are unchanged; bump to detected native versions when they changed |
+| `--android-project <path>`     | Path to Android project root (default `./android`)                                                                             |
+| `--ios-project <path>`         | Path to iOS project root (default `./ios`)                                                                                     |
 
 ### `init`
 
@@ -148,10 +148,14 @@ pnpx capgo-update-lite-cli apps set-policy <app-id> \
   [--name <display-name>] \
   [--disable-auto-update none|patch|minor|major] \
   [--disable-auto-update-under-native | --no-disable-auto-update-under-native] \
-  [--min-plugin-version <semver>|null]
+  [--min-plugin-version <semver>|null] \
+  [--fail-min-devices <n>|null] \
+  [--fail-warn-rate <0..1>|null] \
+  [--fail-risk-rate <0..1>|null] \
+  [--fail-rate-threshold <0..1>|null]
 ```
 
-`--min-plugin-version null` clears the floor. Without `--no-disable-auto-update-under-native` the under-native guard stays at whatever value the server holds.
+`--min-plugin-version null` clears the floor. Without `--no-disable-auto-update-under-native` the under-native guard stays at whatever value the server holds. The `--fail-*` flags override the broken-bundle severity ladder per-app — pass `null` to clear an override and fall back to env / server default. Order is enforced server-side: `warn ≤ risk ≤ disable`. Set `--fail-rate-threshold 0` (or `--fail-min-devices 0`) to disable auto-disable for this app while keeping severity classification for the dashboard / `bundles health`.
 
 ### `bundles list`
 
@@ -178,6 +182,22 @@ pnpx capgo-update-lite-cli bundles promote <version> --app <id> [-c <channel>]
 ```
 
 Errors if zero or multiple bundles match the version on the channel.
+
+### `bundles health`
+
+Show the broken-bundle severity ladder. Without an `app-id`, summarises every app that has at least one non-healthy bundle (most-urgent first). With an `app-id`, lists each bundle of that app classified into `healthy | noisy | warning | at_risk | auto_disabled | manually_disabled`, alongside the resolved per-app thresholds.
+
+```sh
+pnpx capgo-update-lite-cli bundles health [app-id] [--json]
+```
+
+### `bundles reactivate`
+
+Restore an auto-disabled (or manually-disabled) bundle: flips `state=active + active=true`, atomically deactivates siblings on the same channel, and stamps `blacklist_reset_at = now()` so previously-failed devices get another chance via the `/updates` blacklist gate.
+
+```sh
+pnpx capgo-update-lite-cli bundles reactivate <bundle-id>
+```
 
 ### `stats`
 
@@ -243,32 +263,32 @@ The bundle version is sourced from `package.json` automatically; the bump prompt
 
 Rows marked "publish-only" are only read by the `publish` subcommand. Everything else is global.
 
-| CLI flag                      | Env var                   | Config key        | Scope        | Notes                                                     |
-| ----------------------------- | ------------------------- | ----------------- | ------------ | --------------------------------------------------------- |
-| `--server-url <url>`          | `CAPGO_SERVER_URL`        | `serverUrl`       | global       | OTA server base URL                                       |
-| `--admin-token <token>`       | `CAPGO_ADMIN_TOKEN`       | `adminToken`      | global       | Bearer token for `/admin/*`                               |
-| `--config <path>`             | `CAPGO_CONFIG`            | n/a               | global       | JSON config path                                          |
-| `--app-id <id>`               | `CAPGO_APP_ID`            | `appId`           | publish-only | Reverse-domain app identifier                             |
-| `--bundle-version <semver>`   | `CAPGO_VERSION`           | `version`         | publish-only | Bundle version. Defaults to `package.json` version. Named to avoid commander's reserved root `--version` flag. |
-| `--dist-dir <path>`           | `CAPGO_DIST_DIR`          | `distDir`         | publish-only | Built web bundle directory (must contain `index.html`)   |
-| `-c, --channel <name>`        | `CAPGO_CHANNEL`           | `channel`         | most         | Default `production`                                      |
-| `-p, --platforms <list>`      | `CAPGO_PLATFORMS`         | `platforms`       | publish-only | `ios,android,electron` (comma-separated on CLI and env)   |
-| `--link <url>`                | `CAPGO_LINK`              | `link`            | publish-only | Release notes / changelog URL                             |
-| `--comment <text>`            | `CAPGO_COMMENT`           | `comment`         | publish-only | Operator-authored note                                    |
-| `--activate` / `--no-activate`| `CAPGO_ACTIVATE`          | `activate`        | publish-only | Default `true`; env accepts `true/false/1/0/yes/no/on/off` |
-| `--dry-run`                   | `CAPGO_DRY_RUN`           | `dryRun`          | publish-only | Run preflight and zip, skip all server writes             |
-| `--skip-preflight`            | `CAPGO_SKIP_PREFLIGHT`    | `skipPreflight`   | publish-only | Bypass preflight checks                                   |
-| `--no-code-check`             | n/a                       | `codeCheck`       | publish-only | Skip `notifyAppReady()` source scan (config key defaults to `true`) |
-| `--version-exists-ok`         | n/a                       | n/a               | publish-only | Exit 0 if the version is already published                |
-| `--package-json <path>`       | `CAPGO_PACKAGE_JSON`      | `packageJson`     | publish-only | Override auto-detection of `package.json`                 |
-| `--capacitor-config <path>`   | `CAPGO_CAPACITOR_CONFIG`  | `capacitorConfig` | publish-only | Override auto-detection of `capacitor.config.(ts\|js\|json)` |
-| `--min-android-build <semver>`| `CAPGO_MIN_ANDROID_BUILD` | `minAndroidBuild` | publish-only | Minimum native Android versionName required by this bundle |
-| `--min-ios-build <semver>`    | `CAPGO_MIN_IOS_BUILD`     | `minIosBuild`     | publish-only | Minimum native iOS CFBundleShortVersionString required by this bundle |
-| `--auto-min-update-build`     | `CAPGO_AUTO_MIN_UPDATE_BUILD` | `autoMinUpdateBuild` | publish-only | Inherit min builds from prev bundle if native deps unchanged; bump otherwise |
-| `--android-project <path>`    | `CAPGO_ANDROID_PROJECT`   | `androidProject`  | publish-only | Native Android project root (default `./android`)         |
-| `--ios-project <path>`        | `CAPGO_IOS_PROJECT`       | `iosProject`      | publish-only | Native iOS project root (default `./ios`)                 |
-| `-V, --version`               | n/a                       | n/a               | global       | Print CLI version                                         |
-| `-h, --help`                  | n/a                       | n/a               | global       | Show help (supported on every subcommand)                 |
+| CLI flag                       | Env var                       | Config key           | Scope        | Notes                                                                                                          |
+| ------------------------------ | ----------------------------- | -------------------- | ------------ | -------------------------------------------------------------------------------------------------------------- |
+| `--server-url <url>`           | `CAPGO_SERVER_URL`            | `serverUrl`          | global       | OTA server base URL                                                                                            |
+| `--admin-token <token>`        | `CAPGO_ADMIN_TOKEN`           | `adminToken`         | global       | Bearer token for `/admin/*`                                                                                    |
+| `--config <path>`              | `CAPGO_CONFIG`                | n/a                  | global       | JSON config path                                                                                               |
+| `--app-id <id>`                | `CAPGO_APP_ID`                | `appId`              | publish-only | Reverse-domain app identifier                                                                                  |
+| `--bundle-version <semver>`    | `CAPGO_VERSION`               | `version`            | publish-only | Bundle version. Defaults to `package.json` version. Named to avoid commander's reserved root `--version` flag. |
+| `--dist-dir <path>`            | `CAPGO_DIST_DIR`              | `distDir`            | publish-only | Built web bundle directory (must contain `index.html`)                                                         |
+| `-c, --channel <name>`         | `CAPGO_CHANNEL`               | `channel`            | most         | Default `production`                                                                                           |
+| `-p, --platforms <list>`       | `CAPGO_PLATFORMS`             | `platforms`          | publish-only | `ios,android,electron` (comma-separated on CLI and env)                                                        |
+| `--link <url>`                 | `CAPGO_LINK`                  | `link`               | publish-only | Release notes / changelog URL                                                                                  |
+| `--comment <text>`             | `CAPGO_COMMENT`               | `comment`            | publish-only | Operator-authored note                                                                                         |
+| `--activate` / `--no-activate` | `CAPGO_ACTIVATE`              | `activate`           | publish-only | Default `true`; env accepts `true/false/1/0/yes/no/on/off`                                                     |
+| `--dry-run`                    | `CAPGO_DRY_RUN`               | `dryRun`             | publish-only | Run preflight and zip, skip all server writes                                                                  |
+| `--skip-preflight`             | `CAPGO_SKIP_PREFLIGHT`        | `skipPreflight`      | publish-only | Bypass preflight checks                                                                                        |
+| `--no-code-check`              | n/a                           | `codeCheck`          | publish-only | Skip `notifyAppReady()` source scan (config key defaults to `true`)                                            |
+| `--version-exists-ok`          | n/a                           | n/a                  | publish-only | Exit 0 if the version is already published                                                                     |
+| `--package-json <path>`        | `CAPGO_PACKAGE_JSON`          | `packageJson`        | publish-only | Override auto-detection of `package.json`                                                                      |
+| `--capacitor-config <path>`    | `CAPGO_CAPACITOR_CONFIG`      | `capacitorConfig`    | publish-only | Override auto-detection of `capacitor.config.(ts\|js\|json)`                                                   |
+| `--min-android-build <semver>` | `CAPGO_MIN_ANDROID_BUILD`     | `minAndroidBuild`    | publish-only | Minimum native Android versionName required by this bundle                                                     |
+| `--min-ios-build <semver>`     | `CAPGO_MIN_IOS_BUILD`         | `minIosBuild`        | publish-only | Minimum native iOS CFBundleShortVersionString required by this bundle                                          |
+| `--auto-min-update-build`      | `CAPGO_AUTO_MIN_UPDATE_BUILD` | `autoMinUpdateBuild` | publish-only | Inherit min builds from prev bundle if native deps unchanged; bump otherwise                                   |
+| `--android-project <path>`     | `CAPGO_ANDROID_PROJECT`       | `androidProject`     | publish-only | Native Android project root (default `./android`)                                                              |
+| `--ios-project <path>`         | `CAPGO_IOS_PROJECT`           | `iosProject`         | publish-only | Native iOS project root (default `./ios`)                                                                      |
+| `-V, --version`                | n/a                           | n/a                  | global       | Print CLI version                                                                                              |
+| `-h, --help`                   | n/a                           | n/a                  | global       | Show help (supported on every subcommand)                                                                      |
 
 ## Preflight checks (publish only)
 

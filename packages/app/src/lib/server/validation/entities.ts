@@ -69,6 +69,38 @@ export const AppSchema = v.pipe(
                 v.examples(['6.25.0'])
             )
         ),
+        failMinDevices: v.nullable(
+            v.pipe(
+                v.number(),
+                v.description(
+                    'Per-app override for the noise floor: a bundle must have been tried by at least this many unique devices before its fail rate triggers severity classification. Null falls back to env / default.'
+                ),
+                v.examples([10])
+            )
+        ),
+        failWarnRate: v.nullable(
+            v.pipe(
+                v.number(),
+                v.description('Per-app override for the warn-severity threshold (0..1). Null falls back to default.'),
+                v.examples([0.2])
+            )
+        ),
+        failRiskRate: v.nullable(
+            v.pipe(
+                v.number(),
+                v.description('Per-app override for the at-risk-severity threshold (0..1). Null falls back to default.'),
+                v.examples([0.35])
+            )
+        ),
+        failRateThreshold: v.nullable(
+            v.pipe(
+                v.number(),
+                v.description(
+                    'Per-app override for the auto-disable threshold (0..1). Null falls back to default. 0 disables auto-disable for this app.'
+                ),
+                v.examples([0.5])
+            )
+        ),
         createdAt: v.date()
     }),
     v.title('App'),
@@ -112,7 +144,7 @@ export const BundleSchema = v.pipe(
         nativePackages: v.pipe(
             v.record(v.string(), v.string()),
             v.description(
-                'Fingerprint of native-code dependencies (e.g. @capacitor/app) with resolved versions at publish time. Drives the CLI\'s --auto-min-update-build decision.'
+                "Fingerprint of native-code dependencies (e.g. @capacitor/app) with resolved versions at publish time. Drives the CLI's --auto-min-update-build decision."
             ),
             v.examples([{ '@capacitor/app': '6.0.0', '@capacitor/haptics': '6.0.0' }])
         ),
@@ -178,6 +210,66 @@ export const BundleDeleteResponseSchema = v.union([
         v.description('Returned when DELETE /admin/bundles/{id}?purge=1 hard-deletes the bundle.')
     )
 ]);
+
+// --- bundle-health responses ------------------------------------------------
+
+export const BundleHealthSeverityField = v.pipe(
+    v.picklist(['healthy', 'noisy', 'warning', 'at_risk', 'auto_disabled', 'manually_disabled'] as const),
+    v.description(
+        'Severity ladder. healthy=0 fails. noisy=below the noise floor. warning=>= warnRate. at_risk=>= riskRate. auto_disabled=tripped the disable threshold. manually_disabled=state=failed without crossing the threshold.'
+    ),
+    v.examples(['warning'])
+);
+
+export const ResolvedThresholdsSchema = v.pipe(
+    v.object({
+        minDevices: v.pipe(v.number(), v.description('Effective minimum devices before severity is classified.')),
+        warnRate: v.pipe(v.number(), v.description('Effective warn-severity threshold (0..1).')),
+        riskRate: v.pipe(v.number(), v.description('Effective at-risk-severity threshold (0..1).')),
+        disableRate: v.pipe(v.number(), v.description('Effective auto-disable threshold (0..1).'))
+    }),
+    v.title('ResolvedThresholds'),
+    v.description('Per-app override → env var → default ladder, fully resolved.')
+);
+
+export const BundleHealthRowSchema = v.pipe(
+    v.object({
+        bundleId: v.pipe(v.number(), v.description('Server-assigned bundle id.')),
+        appId: AppIdField,
+        version: VersionField,
+        channel: ChannelField,
+        state: v.pipe(v.string(), v.description('Lifecycle state.'), v.examples(['active'])),
+        active: v.pipe(v.boolean(), v.description('Whether this bundle currently resolves for its (app_id, channel).')),
+        releasedAt: v.nullable(v.string()),
+        attemptedDevices: v.pipe(
+            v.number(),
+            v.description('Unique devices that attempted this bundle since its blacklist_reset_at.')
+        ),
+        failedDevices: v.pipe(v.number(), v.description('Unique devices that hit a bundle-integrity failure.')),
+        failRate: v.pipe(v.number(), v.description('failedDevices / attemptedDevices (0..1).')),
+        severity: BundleHealthSeverityField,
+        thresholds: ResolvedThresholdsSchema
+    }),
+    v.title('BundleHealthRow'),
+    v.description('Per-bundle health row used by the operator-facing health views.')
+);
+
+export const BundleHealthRowListSchema = v.array(BundleHealthRowSchema);
+
+export const AppNeedingAttentionSchema = v.pipe(
+    v.object({
+        appId: AppIdField,
+        appName: v.pipe(v.string(), v.description('Display name.')),
+        autoDisabled: v.pipe(v.number(), v.description('Bundles tripped by auto-disable.')),
+        atRisk: v.pipe(v.number(), v.description('Bundles at or above the risk threshold but not auto-disabled.')),
+        warnings: v.pipe(v.number(), v.description('Bundles in the warning band.')),
+        noisy: v.pipe(v.number(), v.description('Bundles with at least one failure but below the noise floor.'))
+    }),
+    v.title('AppNeedingAttention'),
+    v.description('Cross-app summary entry for apps with at least one non-healthy bundle.')
+);
+
+export const AppNeedingAttentionListSchema = v.array(AppNeedingAttentionSchema);
 
 // --- plugin-facing responses ------------------------------------------------
 
@@ -267,6 +359,8 @@ export const NAMED_SCHEMAS = {
     Bundle: BundleSchema,
     StatsEvent: StatsEventSchema,
     BundleInitResponse: BundleInitResponseSchema,
+    BundleHealthRow: BundleHealthRowSchema,
+    AppNeedingAttention: AppNeedingAttentionSchema,
     UpdateAvailable: UpdateAvailableSchema,
     PluginError: PluginErrorSchema
 } as const;

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { ArrowRight } from '@lucide/svelte';
     import { actionLabel } from '$lib/util/statsActions.js';
 
     type Row = {
@@ -17,28 +18,36 @@
     }
 </script>
 
-<div class="card preset-filled-surface-100-900 p-4">
+<div class="card preset-filled-surface-100-900 p-3 sm:p-4">
     <div class="mb-3 flex items-baseline justify-between">
         <h3 class="h5">Recent activity</h3>
-        <a class="anchor text-xs" href="/dashboard/stats">All events →</a>
+        <a class="anchor inline-flex items-center gap-1 text-xs" href="/dashboard/stats">
+            All events <ArrowRight class="size-3" />
+        </a>
     </div>
     {#if data.length === 0}
         <p class="text-surface-600-400 py-4 text-sm">No events.</p>
     {:else}
         <ul class="divide-surface-200-800 divide-y text-sm">
             {#each data as ev}
-                <li class="flex items-center gap-3 py-1.5">
-                    <span class="text-surface-600-400 w-16 shrink-0 font-mono text-xs">
-                        {fmt(ev.receivedAt)}
-                    </span>
-                    <span class="text-xs" title={ev.action ?? ''}>{actionLabel(ev.action)}</span>
-                    <span class="text-surface-600-400 truncate text-xs">{ev.appId}</span>
-                    {#if ev.versionName}
-                        <span class="ml-auto font-mono text-xs">{ev.versionName}</span>
-                    {/if}
-                    {#if ev.platform}
-                        <span class="text-surface-600-400 w-16 text-right text-xs">{ev.platform}</span>
-                    {/if}
+                <li class="py-1.5">
+                    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                        <span class="text-surface-600-400 shrink-0 font-mono text-xs">
+                            {fmt(ev.receivedAt)}
+                        </span>
+                        <span class="min-w-0 flex-1 text-xs" title={ev.action ?? ''}>
+                            {actionLabel(ev.action)}
+                        </span>
+                        {#if ev.versionName}
+                            <span class="shrink-0 font-mono text-xs whitespace-nowrap" title={ev.versionName}>
+                                {ev.versionName}
+                            </span>
+                        {/if}
+                    </div>
+                    <div class="text-surface-600-400 mt-0.5 flex gap-2 text-[11px]">
+                        {#if ev.platform}<span class="shrink-0">{ev.platform}</span>{/if}
+                        <span class="min-w-0 truncate font-mono" title={ev.appId}>{ev.appId}</span>
+                    </div>
                 </li>
             {/each}
         </ul>

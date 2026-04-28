@@ -13,9 +13,7 @@ export default defineConfig({
             // would normally inject. Tests stub them so $lib/server/* files
             // importing them don't blow up at module resolution time.
             '$app/server': fileURLToPath(new URL('./src/__test-stubs__/sveltekit-virtuals.ts', import.meta.url)),
-            '$env/static/private': fileURLToPath(
-                new URL('./src/__test-stubs__/sveltekit-virtuals.ts', import.meta.url)
-            )
+            '$env/static/private': fileURLToPath(new URL('./src/__test-stubs__/sveltekit-virtuals.ts', import.meta.url))
         }
     },
     test: {

@@ -35,7 +35,7 @@
     });
 </script>
 
-<div class="card preset-filled-surface-100-900 p-4">
+<div class="card preset-filled-surface-100-900 p-3 sm:p-4">
     <div class="text-surface-600-400 text-xs tracking-wide uppercase">{label}</div>
     <div class="mt-1 flex items-baseline gap-2">
         <span class="text-2xl font-semibold">{display}</span>

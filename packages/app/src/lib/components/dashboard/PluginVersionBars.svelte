@@ -5,7 +5,7 @@
     const maxDevices = $derived(Math.max(1, ...data.map((r) => r.devices)));
 </script>
 
-<div class="card preset-filled-surface-100-900 p-4">
+<div class="card preset-filled-surface-100-900 p-3 sm:p-4">
     <h3 class="h5 mb-3">Plugin versions</h3>
     {#if data.length === 0}
         <p class="text-surface-600-400 py-6 text-center text-sm">No plugin data yet.</p>

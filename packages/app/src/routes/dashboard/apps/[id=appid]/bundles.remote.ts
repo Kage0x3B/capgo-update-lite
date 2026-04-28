@@ -3,6 +3,7 @@ import * as v from 'valibot';
 import { requireAdminSession } from '$lib/server/auth.js';
 import { platformEnv, withDb } from '$lib/server/remote-helpers.js';
 import * as svc from '$lib/server/services/bundles.js';
+import { bundleHealthForApp, type BundleHealthEnv } from '$lib/server/services/bundleHealth.js';
 import { BundleCommitSchema, BundleInitSchema, BundlePatchSchema } from '$lib/server/validation/admin.js';
 
 const AppIdSchema = v.object({
@@ -12,6 +13,12 @@ const AppIdSchema = v.object({
 export const getBundles = query(AppIdSchema, async ({ app_id }) => {
     requireAdminSession();
     return withDb((db) => svc.listBundles(db, { app_id }));
+});
+
+export const getBundleHealth = query(AppIdSchema, async ({ app_id }) => {
+    requireAdminSession();
+    const env = platformEnv() as unknown as BundleHealthEnv;
+    return withDb((db) => bundleHealthForApp(db, env, app_id));
 });
 
 export const initBundle = command(BundleInitSchema, async (input) => {
@@ -40,4 +47,10 @@ const DeleteInputSchema = v.object({
 export const deleteBundle = command(DeleteInputSchema, async ({ id, purge }) => {
     requireAdminSession();
     return withDb((db) => svc.deleteBundle(db, platformEnv(), id, purge ?? false));
+});
+
+const BundleIdSchema = v.object({ id: v.pipe(v.number(), v.integer(), v.minValue(1)) });
+export const reactivateBundle = command(BundleIdSchema, async ({ id }) => {
+    requireAdminSession();
+    return withDb((db) => svc.reactivateBundle(db, id));
 });

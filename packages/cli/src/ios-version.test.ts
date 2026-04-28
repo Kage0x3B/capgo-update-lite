@@ -2,11 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-    parseBuildConfigurations,
-    resolveIosShortVersion,
-    type IosVersionResult
-} from './ios-version.js';
+import { parseBuildConfigurations, resolveIosShortVersion, type IosVersionResult } from './ios-version.js';
 
 let tmp: string;
 
@@ -87,21 +83,12 @@ async function scaffoldIos(opts: {
     xcconfig?: { name: string; contents: string };
 }): Promise<string> {
     const iosRoot = tmp;
-    await writeFileEnsuringDir(
-        path.join(iosRoot, 'App/App/Info.plist'),
-        plistWithVersion(opts.plistVersion)
-    );
+    await writeFileEnsuringDir(path.join(iosRoot, 'App/App/Info.plist'), plistWithVersion(opts.plistVersion));
     if (opts.pbxprojContent) {
-        await writeFileEnsuringDir(
-            path.join(iosRoot, 'App/App.xcodeproj/project.pbxproj'),
-            opts.pbxprojContent
-        );
+        await writeFileEnsuringDir(path.join(iosRoot, 'App/App.xcodeproj/project.pbxproj'), opts.pbxprojContent);
     }
     if (opts.xcconfig) {
-        await writeFileEnsuringDir(
-            path.join(iosRoot, 'App', opts.xcconfig.name),
-            opts.xcconfig.contents
-        );
+        await writeFileEnsuringDir(path.join(iosRoot, 'App', opts.xcconfig.name), opts.xcconfig.contents);
     }
     return iosRoot;
 }
@@ -144,9 +131,7 @@ describe('resolveIosShortVersion · layer 2 (pbxproj)', () => {
     it('handles ${MARKETING_VERSION} brace syntax', async () => {
         const iosRoot = await scaffoldIos({
             plistVersion: '${MARKETING_VERSION}',
-            pbxprojContent: pbxproj([
-                { name: 'Release', settings: { MARKETING_VERSION: '2.0.0' } }
-            ])
+            pbxprojContent: pbxproj([{ name: 'Release', settings: { MARKETING_VERSION: '2.0.0' } }])
         });
         const result = await resolveIosShortVersion(iosRoot, xcodebuildOff);
         expect(ok(result).version).toBe('2.0.0');
@@ -155,9 +140,7 @@ describe('resolveIosShortVersion · layer 2 (pbxproj)', () => {
     it('reads quoted values like MARKETING_VERSION = "1.2.0"', async () => {
         const iosRoot = await scaffoldIos({
             plistVersion: '$(MARKETING_VERSION)',
-            pbxprojContent: pbxproj([
-                { name: 'Release', settings: { MARKETING_VERSION: '1.2.0 beta' } }
-            ])
+            pbxprojContent: pbxproj([{ name: 'Release', settings: { MARKETING_VERSION: '1.2.0 beta' } }])
         });
         const result = await resolveIosShortVersion(iosRoot, xcodebuildOff);
         expect(ok(result).version).toBe('1.2.0 beta');
@@ -237,9 +220,7 @@ describe('resolveIosShortVersion · layer 2 (pbxproj)', () => {
     it('returns ok:false with trace when MARKETING_VERSION is missing', async () => {
         const iosRoot = await scaffoldIos({
             plistVersion: '$(MARKETING_VERSION)',
-            pbxprojContent: pbxproj([
-                { name: 'Release', settings: { OTHER_SETTING: 'foo' } }
-            ])
+            pbxprojContent: pbxproj([{ name: 'Release', settings: { OTHER_SETTING: 'foo' } }])
         });
         const result = await resolveIosShortVersion(iosRoot, xcodebuildOff);
         expect(result?.ok).toBe(false);
@@ -273,10 +254,7 @@ describe('resolveIosShortVersion · layer 3 (xcconfig)', () => {
 
     it('follows #include chains in xcconfig files', async () => {
         const iosRoot = tmp;
-        await writeFileEnsuringDir(
-            path.join(iosRoot, 'App/App/Info.plist'),
-            plistWithVersion('$(MARKETING_VERSION)')
-        );
+        await writeFileEnsuringDir(path.join(iosRoot, 'App/App/Info.plist'), plistWithVersion('$(MARKETING_VERSION)'));
         await writeFileEnsuringDir(
             path.join(iosRoot, 'App/App.xcodeproj/project.pbxproj'),
             pbxproj([
@@ -288,10 +266,7 @@ describe('resolveIosShortVersion · layer 3 (xcconfig)', () => {
             ])
         );
         await writeFileEnsuringDir(path.join(iosRoot, 'App/Base.xcconfig'), 'SHIP_VERSION = 5.5.5\n');
-        await writeFileEnsuringDir(
-            path.join(iosRoot, 'App/App.xcconfig'),
-            '#include "Base.xcconfig"\n'
-        );
+        await writeFileEnsuringDir(path.join(iosRoot, 'App/App.xcconfig'), '#include "Base.xcconfig"\n');
         const result = await resolveIosShortVersion(iosRoot, xcodebuildOff);
         expect(ok(result).version).toBe('5.5.5');
     });
@@ -320,9 +295,7 @@ describe('resolveIosShortVersion · layer 4 (xcodebuild)', () => {
     it('skips xcodebuild silently on non-darwin platforms', async () => {
         const iosRoot = await scaffoldIos({
             plistVersion: '$(MARKETING_VERSION)',
-            pbxprojContent: pbxproj([
-                { name: 'Release', settings: { OTHER_SETTING: 'x' } }
-            ])
+            pbxprojContent: pbxproj([{ name: 'Release', settings: { OTHER_SETTING: 'x' } }])
         });
         const result = await resolveIosShortVersion(iosRoot, {
             allowXcodebuild: true,
@@ -338,9 +311,7 @@ describe('resolveIosShortVersion · layer 4 (xcodebuild)', () => {
     it('records skip reason when xcodebuild binary is not found (darwin sim)', async () => {
         const iosRoot = await scaffoldIos({
             plistVersion: '$(MARKETING_VERSION)',
-            pbxprojContent: pbxproj([
-                { name: 'Release', settings: { OTHER_SETTING: 'x' } }
-            ])
+            pbxprojContent: pbxproj([{ name: 'Release', settings: { OTHER_SETTING: 'x' } }])
         });
         const result = await resolveIosShortVersion(iosRoot, {
             allowXcodebuild: true,

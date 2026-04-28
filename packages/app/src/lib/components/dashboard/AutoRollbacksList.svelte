@@ -7,7 +7,7 @@
     }
 </script>
 
-<div class="card preset-filled-surface-100-900 p-4">
+<div class="card preset-filled-surface-100-900 p-3 sm:p-4">
     <h3 class="h5 mb-3">Auto-rollback incidents</h3>
     {#if data.length === 0}
         <p class="text-surface-600-400 py-4 text-sm">No rollbacks detected in window.</p>

@@ -1,6 +1,6 @@
 {
     "name": "capgo-update-lite",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "private": true,
     "type": "module",
     "author": {
@@ -38,6 +38,7 @@
         "wrangler": "^4.84.1"
     },
     "dependencies": {
+        "@lucide/svelte": "^1.11.0",
         "@skeletonlabs/skeleton": "^4.15.2",
         "@skeletonlabs/skeleton-svelte": "^4.15.2",
         "@tailwindcss/vite": "^4.2.4",

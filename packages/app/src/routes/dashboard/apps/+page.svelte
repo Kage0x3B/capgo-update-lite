@@ -1,7 +1,8 @@
 <script lang="ts">
-    import { createApp, getApps } from './apps.remote';
+    import { ShieldCheck, ShieldOff } from '@lucide/svelte';
+    import { createApp, getApps, getAppsWithHealth } from './apps.remote';
 
-    const list = $derived(await getApps());
+    const list = $derived(await getAppsWithHealth());
 
     let id = $state('');
     let name = $state('');
@@ -15,6 +16,7 @@
         try {
             await createApp({ id: id.trim(), name: name.trim() });
             await getApps().refresh();
+            await getAppsWithHealth().refresh();
             id = '';
             name = '';
         } catch (e) {
@@ -34,13 +36,13 @@
 </svelte:head>
 
 <header class="mb-6">
-    <h1 class="h2">Apps</h1>
+    <h1 class="h3 sm:h2">Apps</h1>
     <p class="text-surface-600-400 mt-1 text-sm">
         One row per bundle-id (e.g. <code>com.example.app</code>).
     </p>
 </header>
 
-<section class="card preset-filled-surface-100-900 mb-8 p-5">
+<section class="card preset-filled-surface-100-900 mb-8 p-4 sm:p-5">
     <h2 class="h4 mb-3">Register app</h2>
     <form class="flex flex-col gap-3 sm:flex-row sm:items-end" onsubmit={submit}>
         <label class="label flex-1">
@@ -70,17 +72,78 @@
     {#if list.length === 0}
         <p class="text-surface-600-400">No apps yet. Register one above.</p>
     {:else}
-        <div class="table-wrap">
+        <!-- Mobile: card list -->
+        <ul class="space-y-3 md:hidden">
+            {#each list as app}
+                <li class="card preset-filled-surface-100-900 space-y-2 p-3">
+                    <div class="flex flex-wrap items-baseline justify-between gap-2">
+                        <div class="min-w-0 flex-1">
+                            <div class="font-semibold">{app.name}</div>
+                            <code class="text-surface-600-400 text-xs break-all">{app.id}</code>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-2">
+                            {#if app.disableAutoUpdate === 'major'}
+                                <span class="badge preset-tonal-warning">major</span>
+                            {:else if app.disableAutoUpdate === 'minor'}
+                                <span class="badge preset-tonal-error">minor</span>
+                            {:else if app.disableAutoUpdate === 'patch'}
+                                <span class="badge preset-tonal-error">patch</span>
+                            {/if}
+                            {#if app.disableAutoUpdateUnderNative}
+                                <ShieldCheck
+                                    class="text-success-500 size-4"
+                                    aria-label="Under-native guard on"
+                                />
+                            {:else}
+                                <ShieldOff
+                                    class="text-warning-500 size-4"
+                                    aria-label="Under-native guard off"
+                                />
+                            {/if}
+                        </div>
+                    </div>
+                    {#if app.attention}
+                        <div class="flex flex-wrap gap-1">
+                            {#if app.attention.autoDisabled > 0}
+                                <span class="badge preset-tonal-error">{app.attention.autoDisabled} auto-disabled</span>
+                            {/if}
+                            {#if app.attention.atRisk > 0}
+                                <span class="badge preset-tonal-error">{app.attention.atRisk} at risk</span>
+                            {/if}
+                            {#if app.attention.warnings > 0}
+                                <span class="badge preset-tonal-warning">{app.attention.warnings} warning</span>
+                            {/if}
+                            {#if app.attention.noisy > 0}
+                                <span class="badge preset-tonal-surface">{app.attention.noisy} noisy</span>
+                            {/if}
+                        </div>
+                    {/if}
+                    <div class="text-surface-600-400 flex flex-wrap gap-x-3 text-xs">
+                        {#if app.minPluginVersion}
+                            <span>plugin ≥ <code>{app.minPluginVersion}</code></span>
+                        {/if}
+                        <span>created {fmtDate(app.createdAt)}</span>
+                    </div>
+                    <div class="border-surface-200-800 flex gap-3 border-t pt-2 text-sm">
+                        <a class="anchor" href="/dashboard/apps/{app.id}">Bundles</a>
+                        <a class="anchor" href="/dashboard/apps/{app.id}/stats">Stats</a>
+                        <a class="anchor" href="/dashboard/apps/{app.id}/settings">Settings</a>
+                    </div>
+                </li>
+            {/each}
+        </ul>
+
+        <!-- Desktop: table -->
+        <div class="table-wrap hidden md:block">
             <table class="table">
                 <thead>
                     <tr>
                         <th>App id</th>
                         <th>Name</th>
                         <th>Auto-update ceiling</th>
-                        <th title="Refuses OTA bundles older than device native">
-                            Under-native guard
-                        </th>
+                        <th title="Refuses OTA bundles older than device native"> Under-native guard </th>
                         <th>Min plugin</th>
+                        <th>Bundle health</th>
                         <th>Created</th>
                         <th aria-label="actions"></th>
                     </tr>
@@ -103,11 +166,15 @@
                             </td>
                             <td>
                                 {#if app.disableAutoUpdateUnderNative}
-                                    <span title="On — older OTA bundles are refused">🛡️</span>
+                                    <ShieldCheck
+                                        class="text-success-500 size-4"
+                                        aria-label="On — older OTA bundles are refused"
+                                    />
                                 {:else}
-                                    <span title="Off — older OTA bundles can downgrade native"
-                                        >⚠️</span
-                                    >
+                                    <ShieldOff
+                                        class="text-warning-500 size-4"
+                                        aria-label="Off — older OTA bundles can downgrade native"
+                                    />
                                 {/if}
                             </td>
                             <td>
@@ -117,13 +184,35 @@
                                     <span class="text-surface-600-400">—</span>
                                 {/if}
                             </td>
+                            <td>
+                                {#if app.attention}
+                                    <div class="flex flex-wrap gap-1">
+                                        {#if app.attention.autoDisabled > 0}
+                                            <span class="badge preset-tonal-error"
+                                                >{app.attention.autoDisabled} auto-disabled</span
+                                            >
+                                        {/if}
+                                        {#if app.attention.atRisk > 0}
+                                            <span class="badge preset-tonal-error">{app.attention.atRisk} at risk</span>
+                                        {/if}
+                                        {#if app.attention.warnings > 0}
+                                            <span class="badge preset-tonal-warning"
+                                                >{app.attention.warnings} warning</span
+                                            >
+                                        {/if}
+                                        {#if app.attention.noisy > 0}
+                                            <span class="badge preset-tonal-surface">{app.attention.noisy} noisy</span>
+                                        {/if}
+                                    </div>
+                                {:else}
+                                    <span class="text-success-500" aria-label="Healthy">✓</span>
+                                {/if}
+                            </td>
                             <td class="text-surface-600-400">{fmtDate(app.createdAt)}</td>
                             <td class="space-x-3 text-right whitespace-nowrap">
                                 <a class="anchor" href="/dashboard/apps/{app.id}">Bundles</a>
                                 <a class="anchor" href="/dashboard/apps/{app.id}/stats">Stats</a>
-                                <a class="anchor" href="/dashboard/apps/{app.id}/settings"
-                                    >Settings</a
-                                >
+                                <a class="anchor" href="/dashboard/apps/{app.id}/settings">Settings</a>
                             </td>
                         </tr>
                     {/each}

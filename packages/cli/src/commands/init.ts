@@ -73,7 +73,9 @@ export function registerInit(program: Command): void {
             );
 
             if (existsSync(target)) {
-                log.warn(`${path.relative(process.cwd(), target) || target} already exists — it will be overwritten when this finishes.`);
+                log.warn(
+                    `${path.relative(process.cwd(), target) || target} already exists — it will be overwritten when this finishes.`
+                );
             }
 
             // appId source ladder: CLI flag (strict — fail on bad input),
@@ -282,11 +284,7 @@ async function askDistDir(): Promise<string> {
  * just registered it during the wizard) so the caller can suppress the
  * "register the app" line in the post-init checklist.
  */
-async function validateOptional(
-    serverUrl: string,
-    appId: string,
-    existingToken: string | undefined
-): Promise<boolean> {
+async function validateOptional(serverUrl: string, appId: string, existingToken: string | undefined): Promise<boolean> {
     let token = existingToken?.trim();
     if (token) {
         log.info('Using admin token from CAPGO_ADMIN_TOKEN / --admin-token (not written to config).');
@@ -339,9 +337,7 @@ async function validateOptional(
         });
         if (res.status === 401 || res.status === 403) {
             adminCheck.error(`admin token rejected (HTTP ${res.status})`);
-            log.warn(
-                `The token does not match the server's PRIVATE_ADMIN_TOKEN. Config will still be written.`
-            );
+            log.warn(`The token does not match the server's PRIVATE_ADMIN_TOKEN. Config will still be written.`);
             return false;
         }
         if (!res.ok) {
@@ -376,9 +372,7 @@ async function maybeRegisterApp(serverUrl: string, appId: string, token: string)
         initialValue: true
     });
     if (isCancel(wantRegister) || !wantRegister) {
-        log.message(
-            `Skipped — register later with: capgo-update-lite-cli apps add ${appId} --name "..."`
-        );
+        log.message(`Skipped — register later with: capgo-update-lite-cli apps add ${appId} --name "..."`);
         return false;
     }
 
@@ -421,9 +415,7 @@ async function maybeRegisterApp(serverUrl: string, appId: string, token: string)
         return true;
     } catch (e) {
         reg.error(`failed: ${e instanceof Error ? e.message : String(e)}`);
-        log.warn(
-            `Register later with: capgo-update-lite-cli apps add ${appId} --name "${name}"`
-        );
+        log.warn(`Register later with: capgo-update-lite-cli apps add ${appId} --name "${name}"`);
         return false;
     }
 }

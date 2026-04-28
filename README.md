@@ -201,14 +201,14 @@ Auth has three routes (pick whichever suits your environment): `--admin-token <t
 
 ### CLI subcommand summary
 
-| Subcommand                            | Purpose                                                                |
-| ------------------------------------- | ---------------------------------------------------------------------- |
-| `publish`                             | Zip a dist directory and ship it as a bundle (init → R2 PUT → commit). |
-| `apps list` / `add` / `set-policy`    | List registered apps; register a new one; update compatibility policy. |
+| Subcommand                            | Purpose                                                                                |
+| ------------------------------------- | -------------------------------------------------------------------------------------- |
+| `publish`                             | Zip a dist directory and ship it as a bundle (init → R2 PUT → commit).                 |
+| `apps list` / `add` / `set-policy`    | List registered apps; register a new one; update compatibility policy.                 |
 | `bundles list` / `delete` / `promote` | Inspect bundles, soft / hard-delete (`--purge`), promote a previous version to active. |
-| `probe`                               | Smoke-test `POST /updates` with a synthetic device request.            |
-| `stats`                               | List recent stats events, filterable by app / action / time window.    |
-| `init`                                | Scaffold a `capgo-update.config.json` config file.                            |
+| `probe`                               | Smoke-test `POST /updates` with a synthetic device request.                            |
+| `stats`                               | List recent stats events, filterable by app / action / time window.                    |
+| `init`                                | Scaffold a `capgo-update.config.json` config file.                                     |
 
 ### Channels and rollback
 
@@ -283,12 +283,12 @@ sequenceDiagram
 
 ### Environment variables
 
-| Name                                                       | Where                                                   | Purpose                                       |
-| ---------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------- |
-| `PRIVATE_ADMIN_TOKEN`                                      | `.env` (build-time; baked in via `$env/static/private`) | Bearer token for `/admin/*` + dashboard login |
-| `R2_S3_ENDPOINT`                                           | `wrangler secret put`                                   | R2 S3-compatible endpoint URL                 |
-| `R2_ACCESS_KEY_ID`                                         | `wrangler secret put`                                   | R2 API token access key                       |
-| `R2_SECRET_ACCESS_KEY`                                     | `wrangler secret put`                                   | matching secret                               |
+| Name                   | Where                                                   | Purpose                                       |
+| ---------------------- | ------------------------------------------------------- | --------------------------------------------- |
+| `PRIVATE_ADMIN_TOKEN`  | `.env` (build-time; baked in via `$env/static/private`) | Bearer token for `/admin/*` + dashboard login |
+| `R2_S3_ENDPOINT`       | `wrangler secret put`                                   | R2 S3-compatible endpoint URL                 |
+| `R2_ACCESS_KEY_ID`     | `wrangler secret put`                                   | R2 API token access key                       |
+| `R2_SECRET_ACCESS_KEY` | `wrangler secret put`                                   | matching secret                               |
 
 ### Wrangler bindings
 

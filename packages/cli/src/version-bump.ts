@@ -25,10 +25,7 @@ export function bumpVersion(v: string, level: BumpLevel): string {
  * matches npm/yarn behavior. JSON.stringify preserves top-level key order on
  * V8/Node, so the rest of the file shape is left alone.
  */
-export async function writePackageJsonVersion(
-    pkgPath: string,
-    newVersion: string
-): Promise<{ previous: string }> {
+export async function writePackageJsonVersion(pkgPath: string, newVersion: string): Promise<{ previous: string }> {
     const raw = await readFile(pkgPath, 'utf8');
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (typeof parsed.version !== 'string') {

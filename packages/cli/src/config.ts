@@ -169,7 +169,8 @@ export async function resolveConfig(cmd: Command, requires: readonly Requirement
         activate: activateCli ?? envBool('CAPGO_ACTIVATE') ?? file.activate ?? true,
         packageJson: optStr(opts, 'packageJson') ?? envStr('CAPGO_PACKAGE_JSON') ?? file.packageJson,
         capacitorConfig: optStr(opts, 'capacitorConfig') ?? envStr('CAPGO_CAPACITOR_CONFIG') ?? file.capacitorConfig,
-        skipPreflight: opts.skipPreflight === true || envBool('CAPGO_SKIP_PREFLIGHT') === true || file.skipPreflight === true,
+        skipPreflight:
+            opts.skipPreflight === true || envBool('CAPGO_SKIP_PREFLIGHT') === true || file.skipPreflight === true,
         dryRun: opts.dryRun === true || envBool('CAPGO_DRY_RUN') === true || file.dryRun === true,
         // commander's --no-code-check sets opts.codeCheck = false; default true.
         codeCheck: opts.codeCheck === false ? false : file.codeCheck !== false,
@@ -188,11 +189,16 @@ export async function resolveConfig(cmd: Command, requires: readonly Requirement
     };
 
     for (const req of requires) {
-        if (req === 'appId' && !cfg.appId) fail('missing app-id (--app-id, positional, CAPGO_APP_ID, or "appId" in config)');
-        if (req === 'version' && !cfg.version) fail('missing version (--version, positional, CAPGO_VERSION, or "version" in config)');
-        if (req === 'distDir' && !cfg.distDir) fail('missing dist-dir (--dist-dir, positional, CAPGO_DIST_DIR, or "distDir" in config)');
-        if (req === 'serverUrl' && !cfg.serverUrl) fail('missing server-url (--server-url, CAPGO_SERVER_URL, or "serverUrl" in config)');
-        if (req === 'adminToken' && !cfg.adminToken) fail('missing admin token (--admin-token, CAPGO_ADMIN_TOKEN, or "adminToken" in config)');
+        if (req === 'appId' && !cfg.appId)
+            fail('missing app-id (--app-id, positional, CAPGO_APP_ID, or "appId" in config)');
+        if (req === 'version' && !cfg.version)
+            fail('missing version (--version, positional, CAPGO_VERSION, or "version" in config)');
+        if (req === 'distDir' && !cfg.distDir)
+            fail('missing dist-dir (--dist-dir, positional, CAPGO_DIST_DIR, or "distDir" in config)');
+        if (req === 'serverUrl' && !cfg.serverUrl)
+            fail('missing server-url (--server-url, CAPGO_SERVER_URL, or "serverUrl" in config)');
+        if (req === 'adminToken' && !cfg.adminToken)
+            fail('missing admin token (--admin-token, CAPGO_ADMIN_TOKEN, or "adminToken" in config)');
     }
 
     return cfg;

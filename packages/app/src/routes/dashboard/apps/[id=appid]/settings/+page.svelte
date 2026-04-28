@@ -16,6 +16,39 @@
     let disableAutoUpdateUnderNative = $state(untrack(() => app.disableAutoUpdateUnderNative));
     let minPluginVersion = $state(untrack(() => app.minPluginVersion ?? ''));
 
+    // Broken-bundle protection — empty string means "fall back to env / default".
+    // We read .toString() so the inputs are always string-typed; parseRate /
+    // parseInt below convert back, treating empty as null.
+    let failMinDevices = $state(untrack(() => app.failMinDevices?.toString() ?? ''));
+    let failWarnRate = $state(untrack(() => ratePctString(app.failWarnRate)));
+    let failRiskRate = $state(untrack(() => ratePctString(app.failRiskRate)));
+    let failRateThreshold = $state(untrack(() => ratePctString(app.failRateThreshold)));
+
+    function ratePctString(r: number | null): string {
+        if (r === null) return '';
+        return (r * 100).toString();
+    }
+
+    function parseIntOrNull(raw: string): number | null {
+        const trimmed = raw.trim();
+        if (trimmed === '') return null;
+        const n = Number(trimmed);
+        if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+            throw new Error(`expected non-negative integer, got "${raw}"`);
+        }
+        return n;
+    }
+
+    function parseRateOrNull(raw: string, label: string): number | null {
+        const trimmed = raw.trim();
+        if (trimmed === '') return null;
+        const pct = Number(trimmed);
+        if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+            throw new Error(`${label} must be between 0 and 100, got "${raw}"`);
+        }
+        return pct / 100;
+    }
+
     let saving = $state(false);
     let error = $state<string | null>(null);
     let note = $state<string | null>(null);
@@ -34,13 +67,21 @@
         saving = true;
         try {
             const trimmedPlugin = minPluginVersion.trim();
+            const minDevices = parseIntOrNull(failMinDevices);
+            const warnRate = parseRateOrNull(failWarnRate, 'Warning fail rate');
+            const riskRate = parseRateOrNull(failRiskRate, 'At-risk fail rate');
+            const disableRate = parseRateOrNull(failRateThreshold, 'Auto-disable fail rate');
             await patchAppCommand({
                 id: appId,
                 patch: {
                     name: name.trim(),
                     disable_auto_update: disableAutoUpdate,
                     disable_auto_update_under_native: disableAutoUpdateUnderNative,
-                    min_plugin_version: trimmedPlugin === '' ? null : trimmedPlugin
+                    min_plugin_version: trimmedPlugin === '' ? null : trimmedPlugin,
+                    fail_min_devices: minDevices,
+                    fail_warn_rate: warnRate,
+                    fail_risk_rate: riskRate,
+                    fail_rate_threshold: disableRate
                 }
             });
             await Promise.all([getAppById({ id: appId }).refresh(), getApps().refresh()]);
@@ -51,37 +92,20 @@
             saving = false;
         }
     }
+
+    function resetThresholds() {
+        failMinDevices = '';
+        failWarnRate = '';
+        failRiskRate = '';
+        failRateThreshold = '';
+    }
 </script>
 
 <svelte:head>
     <title>{appId} — Settings</title>
 </svelte:head>
 
-<header class="mb-6">
-    <p class="text-surface-600-400 text-xs">
-        <a class="anchor" href="/dashboard/apps">← All apps</a>
-    </p>
-    <h1 class="h2"><code>{appId}</code></h1>
-    <nav class="border-surface-200-800 mt-4 flex gap-5 border-b text-sm">
-        <a
-            href="/dashboard/apps/{appId}"
-            class="text-surface-600-400 hover:text-surface-950-50 -mb-px border-b-2 border-transparent px-1 pb-2"
-        >
-            Bundles
-        </a>
-        <a
-            href="/dashboard/apps/{appId}/stats"
-            class="text-surface-600-400 hover:text-surface-950-50 -mb-px border-b-2 border-transparent px-1 pb-2"
-        >
-            Stats
-        </a>
-        <span class="border-primary-500 text-primary-500 -mb-px border-b-2 px-1 pb-2 font-semibold">
-            Settings
-        </span>
-    </nav>
-</header>
-
-<section class="card preset-filled-surface-100-900 max-w-2xl p-5">
+<section class="card preset-filled-surface-100-900 max-w-2xl p-4 sm:p-5">
     <form class="space-y-5" onsubmit={submit}>
         <label class="label">
             <span class="label-text">Display name</span>
@@ -112,17 +136,13 @@
         </fieldset>
 
         <label class="flex items-start gap-2 text-sm">
-            <input
-                type="checkbox"
-                class="checkbox mt-1"
-                bind:checked={disableAutoUpdateUnderNative}
-            />
+            <input type="checkbox" class="checkbox mt-1" bind:checked={disableAutoUpdateUnderNative} />
             <span>
                 <strong>Refuse OTA bundles older than device native</strong>
                 <span class="text-surface-600-400 block text-xs">
-                    When on, /updates withholds any bundle whose semver is lower than the device's
-                    native version_build. Recommended; turning this off lets a fresh install on a
-                    new native shell get downgraded by an old OTA bundle.
+                    When on, /updates withholds any bundle whose semver is lower than the device's native version_build.
+                    Recommended; turning this off lets a fresh install on a new native shell get downgraded by an old
+                    OTA bundle.
                 </span>
             </span>
         </label>
@@ -134,17 +154,80 @@
 
         <label class="label">
             <span class="label-text">Minimum plugin version</span>
-            <input
-                class="input"
-                bind:value={minPluginVersion}
-                placeholder="6.25.0"
-                maxlength="64"
-            />
+            <input class="input" bind:value={minPluginVersion} placeholder="6.25.0" maxlength="64" />
             <span class="text-surface-600-400 text-xs">
-                Devices running an older <code>@capgo/capacitor-updater</code> are refused. Leave
-                empty to clear the floor.
+                Devices running an older <code>@capgo/capacitor-updater</code> are refused. Leave empty to clear the floor.
             </span>
         </label>
+
+        <fieldset class="border-surface-300-700 space-y-3 rounded border p-4">
+            <legend class="label-text px-1">Broken-bundle protection</legend>
+            <p class="text-surface-600-400 text-xs">
+                Devices that report a bundle-integrity failure (<code>set_fail</code>, <code>update_fail</code>,
+                <code>decrypt_fail</code>,
+                <code>checksum_fail</code>, <code>unzip_fail</code>) are individually blacklisted from receiving that
+                bundle again. Once enough unique devices fail on a bundle, the dashboard shows progressively louder
+                warnings and finally auto-disables it. Leave any field empty to fall back to the environment / built-in
+                default.
+            </p>
+            <label class="label">
+                <span class="label-text">Min unique devices (noise floor)</span>
+                <input
+                    class="input"
+                    type="number"
+                    min="0"
+                    step="1"
+                    bind:value={failMinDevices}
+                    placeholder="Default: 10"
+                />
+                <span class="text-surface-600-400 text-xs">
+                    Bundle must have been tried by at least this many unique devices before any rate-based severity
+                    (warning / at risk / auto-disable) kicks in. 0 disables auto-disable for this app.
+                </span>
+            </label>
+            <div class="grid gap-3 sm:grid-cols-3">
+                <label class="label">
+                    <span class="label-text">Warning rate (%)</span>
+                    <input
+                        class="input"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        bind:value={failWarnRate}
+                        placeholder="Default: 20"
+                    />
+                </label>
+                <label class="label">
+                    <span class="label-text">At-risk rate (%)</span>
+                    <input
+                        class="input"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        bind:value={failRiskRate}
+                        placeholder="Default: 35"
+                    />
+                </label>
+                <label class="label">
+                    <span class="label-text">Auto-disable rate (%)</span>
+                    <input
+                        class="input"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        bind:value={failRateThreshold}
+                        placeholder="Default: 50"
+                    />
+                </label>
+            </div>
+            <p class="text-surface-600-400 text-xs">Order is enforced server-side: warning ≤ at-risk ≤ auto-disable.</p>
+            <button type="button" class="btn btn-sm preset-tonal" onclick={resetThresholds}>
+                Reset all to default
+            </button>
+        </fieldset>
 
         <div class="flex items-center gap-3">
             <button class="btn preset-filled-primary-500" type="submit" disabled={saving}>

@@ -14,12 +14,7 @@ vi.mock('./config.js', () => ({
 // Reset between tests so leakage is impossible.
 
 const { loadCompletionConfig } = await import('./config.js');
-const {
-    completeAppId,
-    completeBundleVersion,
-    completeChannel,
-    completeFromList
-} = await import('./completion.js');
+const { completeAppId, completeBundleVersion, completeChannel, completeFromList } = await import('./completion.js');
 
 let tmp: string;
 let originalXdg: string | undefined;
@@ -185,7 +180,7 @@ describe('completeChannel', () => {
         expect(r.calls).toEqual([]);
     });
 
-    it('emits distinct channels seen across that app\'s bundles', async () => {
+    it("emits distinct channels seen across that app's bundles", async () => {
         vi.mocked(loadCompletionConfig).mockResolvedValue({
             serverUrl: 'https://x',
             adminToken: 't',

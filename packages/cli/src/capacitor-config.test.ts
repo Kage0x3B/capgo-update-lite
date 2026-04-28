@@ -25,10 +25,7 @@ describe('readAppIdFromCapacitorConfig', () => {
     });
 
     it('parses capacitor.config.json via JSON.parse', async () => {
-        await write(
-            'capacitor.config.json',
-            JSON.stringify({ appId: 'com.example.app', appName: 'Example' }, null, 2)
-        );
+        await write('capacitor.config.json', JSON.stringify({ appId: 'com.example.app', appName: 'Example' }, null, 2));
         const result = await readAppIdFromCapacitorConfig(tmp);
         expect(result).toEqual({ appId: 'com.example.app', source: 'capacitor.config.json' });
     });
@@ -53,29 +50,20 @@ describe('readAppIdFromCapacitorConfig', () => {
     });
 
     it('parses double-quoted appId in a JS module', async () => {
-        await write(
-            'capacitor.config.js',
-            `module.exports = {\n  appId: "com.example.js",\n  appName: "X"\n};`
-        );
+        await write('capacitor.config.js', `module.exports = {\n  appId: "com.example.js",\n  appName: "X"\n};`);
         const result = await readAppIdFromCapacitorConfig(tmp);
         expect(result?.appId).toBe('com.example.js');
     });
 
     it('parses backtick-quoted appId', async () => {
-        await write(
-            'capacitor.config.ts',
-            'const config = { appId: `com.example.tpl`, appName: `X` };'
-        );
+        await write('capacitor.config.ts', 'const config = { appId: `com.example.tpl`, appName: `X` };');
         const result = await readAppIdFromCapacitorConfig(tmp);
         expect(result?.appId).toBe('com.example.tpl');
     });
 
     it('parses JSON-style quoted-key in a TS file', async () => {
         // Some hand-written configs use the JSON-quoted key shape even in TS.
-        await write(
-            'capacitor.config.ts',
-            `export default {\n  "appId": "com.example.quoted-key",\n};`
-        );
+        await write('capacitor.config.ts', `export default {\n  "appId": "com.example.quoted-key",\n};`);
         const result = await readAppIdFromCapacitorConfig(tmp);
         expect(result?.appId).toBe('com.example.quoted-key');
     });

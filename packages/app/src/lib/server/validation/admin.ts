@@ -79,6 +79,17 @@ export const BundleInitSchema = v.object({
     native_packages: NativePackagesInput
 });
 
+const FailRateInput = v.nullable(
+    v.pipe(
+        v.number(),
+        v.minValue(0),
+        v.maxValue(1),
+        v.description(
+            'Per-app override for a broken-bundle severity threshold (0..1, fraction of unique devices that hit a bundle-integrity failure). null falls back to env / default.'
+        )
+    )
+);
+
 export const AppPatchSchema = v.object({
     disable_auto_update: v.optional(
         v.pipe(
@@ -107,7 +118,22 @@ export const AppPatchSchema = v.object({
             )
         )
     ),
-    name: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256), v.description('Display name.')))
+    name: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256), v.description('Display name.'))),
+    fail_min_devices: v.optional(
+        v.nullable(
+            v.pipe(
+                v.number(),
+                v.integer(),
+                v.minValue(0),
+                v.description(
+                    'Per-app override for the broken-bundle noise floor: a bundle must have been tried by at least this many unique devices before its fail rate triggers severity classification. 0 disables auto-disable. null falls back to env / default.'
+                )
+            )
+        )
+    ),
+    fail_warn_rate: v.optional(FailRateInput),
+    fail_risk_rate: v.optional(FailRateInput),
+    fail_rate_threshold: v.optional(FailRateInput)
 });
 
 export const AppIdParamsSchema = v.object({

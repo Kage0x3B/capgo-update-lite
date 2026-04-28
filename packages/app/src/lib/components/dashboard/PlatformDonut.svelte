@@ -35,13 +35,13 @@
     });
 </script>
 
-<div class="card preset-filled-surface-100-900 p-4">
+<div class="card preset-filled-surface-100-900 p-3 sm:p-4">
     <h3 class="h5 mb-3">Platform split</h3>
 
     {#if total === 0}
         <p class="text-surface-600-400 py-6 text-center text-sm">No devices in window.</p>
     {:else}
-        <div class="flex items-center gap-6">
+        <div class="flex flex-col items-center gap-3">
             <svg viewBox="0 0 160 160" width="160" height="160" class="shrink-0">
                 {#each arcs as a}
                     <path d={a.d} fill={a.fill}>
@@ -64,11 +64,11 @@
                 </text>
             </svg>
 
-            <ul class="space-y-1.5 text-sm">
+            <ul class="flex w-full flex-wrap justify-center gap-x-4 gap-y-1.5 text-sm">
                 {#each arcs as a}
                     <li class="flex items-center gap-2">
                         <span class="inline-block h-3 w-3 rounded-sm" style:background={a.fill}></span>
-                        <span class="w-16">{a.row.platform}</span>
+                        <span>{a.row.platform}</span>
                         <span class="text-surface-600-400 tabular-nums">
                             {a.row.devices} <span class="text-xs">({(a.frac * 100).toFixed(0)}%)</span>
                         </span>

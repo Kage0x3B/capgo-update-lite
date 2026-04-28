@@ -1,12 +1,18 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { defineRoute } from '$lib/server/defineRoute.js';
-import { apps, bundles } from '$lib/server/db/schema.js';
+import { apps, bundles, statsEvents } from '$lib/server/db/schema.js';
 import { err200, resToVersion } from '$lib/server/responses.js';
 import { isNewer, parseSemver } from '$lib/server/semver.js';
 import { presignGet } from '$lib/server/r2.js';
 import { evaluateUpdate } from '$lib/server/services/updateDecision.js';
+import { BUNDLE_BREAKING_ACTIONS } from '$lib/server/services/analytics.js';
 import { UpdatesRequestSchema } from '$lib/server/validation/updates.js';
 import { UpdateAvailableSchema, UPDATES_ERROR_CODES } from '$lib/server/validation/entities.js';
+
+// Pre-rendered SQL fragment listing the actions that count as "this device
+// failed this bundle" — kept in sync with the partial-index predicate in
+// drizzle/0003_graceful_reptil.sql via BUNDLE_BREAKING_ACTIONS.
+const BUNDLE_BREAKING_SQL = sql.raw(BUNDLE_BREAKING_ACTIONS.map((a) => `'${a}'`).join(','));
 
 /**
  * POST /updates — called by @capgo/capacitor-updater on every app launch.
@@ -72,11 +78,15 @@ export const POST = defineRoute(
         // capgo-backend/.../plugins/stats.ts:186-195 so that mixed-case IDs don't
         // appear as duplicates across endpoints.
         const deviceId = body.device_id.toLowerCase();
-        void deviceId; // referenced by /stats; no DB write on /updates itself yet
 
         const [app] = await db.select().from(apps).where(eq(apps.id, body.app_id)).limit(1);
         if (!app) return err200('no_app', `Unknown app_id: ${body.app_id}`);
 
+        // Per-device blacklist: skip bundles that this device has already failed
+        // on. Backed by the partial index stats_events_device_failure_idx so
+        // this is an index-only probe per candidate. The order-by + limit 1
+        // means the resolver naturally falls through to the next-newest active
+        // bundle if the newest is blacklisted.
         const rows = await db
             .select()
             .from(bundles)
@@ -86,7 +96,19 @@ export const POST = defineRoute(
                     eq(bundles.channel, body.defaultChannel ?? 'production'),
                     eq(bundles.active, true),
                     eq(bundles.state, 'active'),
-                    sql`${body.platform} = ANY(${bundles.platforms})`
+                    sql`${body.platform} = ANY(${bundles.platforms})`,
+                    // Events received before bundles.blacklist_reset_at are
+                    // ignored — that's how operator-driven reactivation gives
+                    // previously-failed devices another shot at the bundle
+                    // without losing the underlying event history.
+                    sql`NOT EXISTS (
+                        SELECT 1 FROM ${statsEvents}
+                        WHERE ${statsEvents.appId} = ${bundles.appId}
+                          AND ${statsEvents.deviceId} = ${deviceId}
+                          AND ${statsEvents.versionName} = ${bundles.version}
+                          AND ${statsEvents.action} IN (${BUNDLE_BREAKING_SQL})
+                          AND (${bundles.blacklistResetAt} IS NULL OR ${statsEvents.receivedAt} > ${bundles.blacklistResetAt})
+                    )`
                 )
             )
             .orderBy(sql`${bundles.releasedAt} DESC NULLS LAST`)

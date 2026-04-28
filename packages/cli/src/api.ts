@@ -14,7 +14,50 @@ export type AppRow = {
     disableAutoUpdate: 'none' | 'major' | 'minor' | 'patch';
     disableAutoUpdateUnderNative: boolean;
     minPluginVersion: string | null;
+    failMinDevices: number | null;
+    failWarnRate: number | null;
+    failRiskRate: number | null;
+    failRateThreshold: number | null;
     createdAt: string;
+};
+
+export type BundleHealthSeverity =
+    | 'healthy'
+    | 'noisy'
+    | 'warning'
+    | 'at_risk'
+    | 'auto_disabled'
+    | 'manually_disabled';
+
+export type ResolvedThresholds = {
+    minDevices: number;
+    warnRate: number;
+    riskRate: number;
+    disableRate: number;
+};
+
+export type BundleHealthRow = {
+    bundleId: number;
+    appId: string;
+    version: string;
+    channel: string;
+    state: string;
+    active: boolean;
+    releasedAt: string | null;
+    attemptedDevices: number;
+    failedDevices: number;
+    failRate: number;
+    severity: BundleHealthSeverity;
+    thresholds: ResolvedThresholds;
+};
+
+export type AppNeedingAttention = {
+    appId: string;
+    appName: string;
+    autoDisabled: number;
+    atRisk: number;
+    warnings: number;
+    noisy: number;
 };
 
 export type BundleRow = {
@@ -36,7 +79,6 @@ export type BundleRow = {
     releasedAt: string | null;
     createdAt: string;
 };
-
 
 export type StatsEventRow = {
     id: string;
@@ -80,9 +122,7 @@ export type ApiContext = {
     adminToken?: string;
 };
 
-export type ApiResult<T> =
-    | { ok: true; status: number; data: T }
-    | { ok: false; status: number; body: string };
+export type ApiResult<T> = { ok: true; status: number; data: T } | { ok: false; status: number; body: string };
 
 function headers(ctx: ApiContext): Record<string, string> {
     return {

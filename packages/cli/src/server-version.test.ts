@@ -39,9 +39,7 @@ describe('checkServerVersion', () => {
 
 describe('compatWarningMessage', () => {
     it('returns null for ok status', () => {
-        expect(
-            compatWarningMessage({ status: 'ok', serverVersion: '1.0.0', minVersion: '0.3.0' })
-        ).toBeNull();
+        expect(compatWarningMessage({ status: 'ok', serverVersion: '1.0.0', minVersion: '0.3.0' })).toBeNull();
     });
 
     it('mentions /health for missing version', () => {
