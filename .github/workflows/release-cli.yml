@@ -56,13 +56,20 @@ jobs:
                       exit 1
                   fi
 
+            # Trusted Publishing requires npm ≥ 11.5.1 — Node 20's bundled npm
+            # (10.x) doesn't know how to exchange the OIDC token, and pnpm
+            # publish in 10.x reads the setup-node-written .npmrc auth-token
+            # line literally rather than falling through to OIDC. Bumping npm
+            # globally and publishing with `npm publish` directly is the
+            # documented happy path.
+            - name: Upgrade npm to a Trusted-Publishing-aware release
+              run: npm install -g npm@latest
+
             - name: Publish to npm
-              # Auth is via OIDC Trusted Publishing — no NPM_TOKEN needed (the
-              # job's id-token: write permission lets npm verify the runner
-              # identity against the package's configured trusted publisher).
-              # --no-git-checks: pnpm refuses to publish from a detached HEAD
-              # without this; tag pushes are always detached.
-              run: pnpm -F capgo-update-lite-cli publish --provenance --access public --no-git-checks
+              # OIDC Trusted Publishing: npm exchanges the workflow's OIDC
+              # token for a short-lived publish credential, no NPM_TOKEN.
+              working-directory: packages/cli
+              run: npm publish --provenance --access public
 
             # Mirror the annotated-tag message into a GitHub Release page for
             # the repo. Only runs when npm publish succeeded (default
