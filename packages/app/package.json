@@ -9,7 +9,7 @@
         "url": "https://moritz.website"
     },
     "scripts": {
-        "build": "vite build",
+        "build": "vite build && node cron/append.mjs",
         "deploy": "wrangler deploy",
         "dev": "vite dev",
         "preview": "vite preview",
@@ -43,6 +43,7 @@
         "@skeletonlabs/skeleton-svelte": "^4.15.2",
         "@tailwindcss/vite": "^4.2.4",
         "aws4fetch": "^1.0.20",
+        "capgo-update-lite-shared": "workspace:*",
         "drizzle-orm": "^0.45.2",
         "jszip": "^3.10.1",
         "layercake": "^10.0.2",

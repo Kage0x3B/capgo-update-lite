@@ -1,0 +1,57 @@
+name: release-cli
+
+# Triggered by tags like `cli-v0.4.1`. The `cli-` prefix isolates CLI tags
+# from any future `app-v*` scheme. Push tags manually:
+#   git tag cli-v0.4.1 && git push origin cli-v0.4.1
+on:
+    push:
+        tags: ['cli-v*']
+
+permissions:
+    # OIDC for npm provenance. With this, npm shows a "verified provenance"
+    # badge tying the published artifact to this exact workflow + commit.
+    contents: read
+    id-token: write
+
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  registry-url: https://registry.npmjs.org
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Test
+              run: pnpm -F capgo-update-lite-cli test
+
+            - name: Build
+              run: pnpm -F capgo-update-lite-cli build
+
+            # Refuse to publish if the tag and the package.json version don't
+            # agree — saves a bad publish from a forgotten version bump.
+            - name: Verify tag matches package version
+              run: |
+                  PKG_VERSION=$(node -p "require('./packages/cli/package.json').version")
+                  TAG_VERSION=${GITHUB_REF_NAME#cli-v}
+                  if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+                      echo "tag ${GITHUB_REF_NAME} (${TAG_VERSION}) does not match package.json (${PKG_VERSION})"
+                      exit 1
+                  fi
+
+            - name: Publish to npm
+              # --no-git-checks: pnpm refuses to publish from a detached HEAD
+              # without this; tag pushes are always detached.
+              run: pnpm -F capgo-update-lite-cli publish --provenance --access public --no-git-checks
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -31,10 +31,7 @@
     <div class="card preset-filled-surface-100-900 col-span-2 min-w-0 p-3 sm:p-4 lg:col-span-1">
         <div class="text-surface-600-400 text-xs tracking-wide uppercase">Current bundle</div>
         {#if data.currentBundle}
-            <code
-                class="mt-1 block min-w-0 truncate text-base font-semibold"
-                title={data.currentBundle.version}
-            >
+            <code class="mt-1 block min-w-0 truncate text-base font-semibold" title={data.currentBundle.version}>
                 {data.currentBundle.version}
             </code>
             {#if data.currentBundle.releasedAt}

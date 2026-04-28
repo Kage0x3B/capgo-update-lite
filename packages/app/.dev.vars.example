@@ -11,3 +11,21 @@
 R2_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
+
+# Bearer token for the internal /cron/[job] route. The scheduled handler in
+# cron/job.js sends this as `Authorization: Bearer ${CRON_SECRET}` when it
+# fires the synthetic request. Without it, scheduled jobs log a refusal and
+# skip — set it in production via `wrangler secret put CRON_SECRET`. Generate
+# one with `openssl rand -hex 16`.
+CRON_SECRET=
+
+# --- Optional tunables ------------------------------------------------------
+# Uncomment and adjust as needed. Defaults are applied when unset/empty.
+#
+# Lifetime of presigned bundle GET URLs (seconds). Devices on slow networks
+# may need a higher value. Default 3600 (1h). Min 60, max 7 days (AWS SigV4 cap).
+# R2_DOWNLOAD_TTL_SECONDS=3600
+#
+# Days of stats_events history to retain. Set to 0 (or empty) to disable
+# the daily prune cron entirely. Default 90.
+# STATS_RETENTION_DAYS=90

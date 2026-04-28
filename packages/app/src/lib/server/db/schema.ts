@@ -19,6 +19,19 @@ import {
 // (we use per-bundle min_*_build for that semantic instead).
 export const disableAutoUpdateEnum = pgEnum('disable_auto_update_kind', ['none', 'major', 'minor', 'patch']);
 
+/**
+ * Roles for the admin token model. Rank: viewer < publisher < admin.
+ *
+ *  - viewer    — read-only dashboard + GET admin endpoints. No mutations.
+ *  - publisher — viewer + bundle CRUD (publish, edit, delete, promote,
+ *                reactivate). Cannot manage apps, policy, or tokens.
+ *  - admin     — full access: app CRUD, per-app policy, token management.
+ *
+ * `PRIVATE_ADMIN_TOKEN` (build-time secret) is always treated as `admin`
+ * outside this table — see lib/server/auth.ts.
+ */
+export const adminRoleEnum = pgEnum('admin_role', ['viewer', 'publisher', 'admin']);
+
 export const apps = pgTable('apps', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
@@ -113,8 +126,32 @@ export const statsEvents = pgTable(
     ]
 );
 
+/**
+ * Database-backed admin tokens. The plaintext token is shown exactly once on
+ * creation; we store sha-256 of the bytes (hex). The build-time
+ * `PRIVATE_ADMIN_TOKEN` env var is a separate, always-valid super-admin and is
+ * NOT mirrored here — it bypasses this table entirely.
+ *
+ * `revokedAt` is a soft-delete; the row stays so the audit trail (who created
+ * it, when it was last used) survives. `createdBy` self-references this same
+ * table; null means "created by the bootstrap super-admin".
+ */
+export const adminTokens = pgTable('admin_tokens', {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    role: adminRoleEnum('role').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    createdBy: integer('created_by'),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true })
+});
+
 export type App = typeof apps.$inferSelect;
 export type Bundle = typeof bundles.$inferSelect;
 export type NewBundle = typeof bundles.$inferInsert;
 export type StatsEvent = typeof statsEvents.$inferSelect;
 export type NewStatsEvent = typeof statsEvents.$inferInsert;
+export type AdminToken = typeof adminTokens.$inferSelect;
+export type NewAdminToken = typeof adminTokens.$inferInsert;
+export type AdminRole = (typeof adminRoleEnum.enumValues)[number];

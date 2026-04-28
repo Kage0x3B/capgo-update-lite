@@ -5,7 +5,7 @@ import { listBundles } from '$lib/server/services/bundles.js';
 
 export const GET = defineRoute(
     {
-        auth: 'admin',
+        auth: 'viewer',
         query: BundleListQuerySchema,
         response: BundleListResponseSchema,
         meta: {

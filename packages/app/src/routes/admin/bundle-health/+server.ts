@@ -4,7 +4,7 @@ import { appsNeedingAttention, type BundleHealthEnv } from '$lib/server/services
 
 export const GET = defineRoute(
     {
-        auth: 'admin',
+        auth: 'viewer',
         response: AppNeedingAttentionListSchema,
         meta: {
             operationId: 'listAppsNeedingAttention',

@@ -5,7 +5,7 @@ import { listApps, upsertApp } from '$lib/server/services/apps.js';
 
 export const GET = defineRoute(
     {
-        auth: 'admin',
+        auth: 'viewer',
         response: AppListResponseSchema,
         meta: {
             operationId: 'listApps',

@@ -7,12 +7,17 @@
 
     let { data, children } = $props();
 
-    const nav = [
+    const baseNav = [
         { href: '/dashboard', label: 'Overview', exact: true },
         { href: '/dashboard/apps', label: 'Apps' },
         { href: '/dashboard/stats', label: 'Stats' },
         { href: '/dashboard/cli', label: 'CLI' }
     ];
+    // Admin-only entries are hidden from viewer/publisher sessions. The route
+    // itself also enforces the role, so visiting the URL directly still 403s.
+    const nav = $derived(
+        data.auth?.role === 'admin' ? [...baseNav, { href: '/dashboard/admin/tokens', label: 'Tokens' }] : baseNav
+    );
 
     const isLogin = $derived(page.url.pathname === '/dashboard/login');
 
@@ -29,7 +34,7 @@
         'transition transition-discrete opacity-0 translate-x-full starting:data-[state=open]:opacity-0 starting:data-[state=open]:translate-x-full data-[state=open]:opacity-100 data-[state=open]:translate-x-0';
 </script>
 
-{#if isLogin || !data.admin}
+{#if isLogin || !data.auth}
     {@render children?.()}
 {:else}
     <div class="flex min-h-screen flex-col">

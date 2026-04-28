@@ -1,5 +1,7 @@
+import { isAdminRole, type AdminRole } from './roles.js';
+
 export const SESSION_COOKIE = 'capgo_admin_session';
-const SESSION_PAYLOAD_PREFIX = 'admin.session.v1.';
+const SESSION_PAYLOAD_PREFIX = 'admin.session.v2.';
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 export type SessionCookieOptions = {
@@ -18,30 +20,46 @@ const baseOptions = (secure: boolean): SessionCookieOptions => ({
     maxAge: MAX_AGE_SECONDS
 });
 
-/** Sign a fresh session cookie. Caller stores the returned value via `cookies.set(SESSION_COOKIE, ...)`. */
+export interface VerifiedSession {
+    role: AdminRole;
+}
+
+/**
+ * Sign a fresh session cookie. The role is part of the signed payload so we
+ * can authorise dashboard requests without hitting the DB on every navigation.
+ *
+ * Format: `<exp>.<role>.<hmac>` where hmac covers `prefix + exp + '.' + role`.
+ *
+ * Note: revoking a DB-backed admin_tokens row does NOT invalidate live
+ * sessions issued from it — the session HMAC is keyed by PRIVATE_ADMIN_TOKEN,
+ * not by the user's token. Rotate PRIVATE_ADMIN_TOKEN to force a global logout.
+ */
 export async function issueSession(
     adminToken: string,
+    role: AdminRole,
     opts: { secure?: boolean } = {}
 ): Promise<{ value: string; options: SessionCookieOptions }> {
     const exp = Math.floor(Date.now() / 1000) + MAX_AGE_SECONDS;
-    const hmac = await hmacHex(adminToken, SESSION_PAYLOAD_PREFIX + exp);
+    const data = `${exp}.${role}`;
+    const hmac = await hmacHex(adminToken, SESSION_PAYLOAD_PREFIX + data);
     return {
-        value: `${exp}.${hmac}`,
+        value: `${data}.${hmac}`,
         options: baseOptions(opts.secure ?? true)
     };
 }
 
-/** Returns true iff the cookie signature is valid and has not expired. */
-export async function verifySession(value: string | undefined, adminToken: string): Promise<boolean> {
-    if (!value) return false;
-    const dot = value.indexOf('.');
-    if (dot <= 0) return false;
-    const expStr = value.slice(0, dot);
-    const mac = value.slice(dot + 1);
+/** Returns the verified payload iff the cookie signature is valid and not expired. */
+export async function verifySession(value: string | undefined, adminToken: string): Promise<VerifiedSession | null> {
+    if (!value) return null;
+    const parts = value.split('.');
+    if (parts.length !== 3) return null;
+    const [expStr, role, mac] = parts;
+    if (!isAdminRole(role)) return null;
     const exp = Number(expStr);
-    if (!Number.isFinite(exp) || exp <= Math.floor(Date.now() / 1000)) return false;
-    const expected = await hmacHex(adminToken, SESSION_PAYLOAD_PREFIX + exp);
-    return timingSafeEqualHex(mac, expected);
+    if (!Number.isFinite(exp) || exp <= Math.floor(Date.now() / 1000)) return null;
+    const expected = await hmacHex(adminToken, SESSION_PAYLOAD_PREFIX + `${expStr}.${role}`);
+    if (!timingSafeEqualHex(mac, expected)) return null;
+    return { role };
 }
 
 /** Cookie attributes for clearing — call via `cookies.delete(SESSION_COOKIE, { path: '/' })` or `cookies.set('', { maxAge: 0 })`. */

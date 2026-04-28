@@ -21,13 +21,7 @@ export type AppRow = {
     createdAt: string;
 };
 
-export type BundleHealthSeverity =
-    | 'healthy'
-    | 'noisy'
-    | 'warning'
-    | 'at_risk'
-    | 'auto_disabled'
-    | 'manually_disabled';
+export type BundleHealthSeverity = 'healthy' | 'noisy' | 'warning' | 'at_risk' | 'auto_disabled' | 'manually_disabled';
 
 export type ResolvedThresholds = {
     minDevices: number;

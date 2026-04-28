@@ -28,11 +28,12 @@ Before clicking "Deploy", open **Advanced settings** and add a build-time variab
 openssl rand -hex 16
 ```
 
-Three follow-ups after the first deploy. The worker will log errors until they're done:
+Four follow-ups after the first deploy. The worker will log errors (and the cron jobs will refuse to run) until they're done:
 
 1. **Apply the DB schema.** Run `pnpm db:push`. Details: [Postgres + Drizzle setup](#postgres--drizzle-setup).
 2. **Set the R2 secrets.** Mint an R2 API token, then `wrangler secret put` three values. Details: [R2 + CORS setup](#r2--cors-setup).
 3. **Apply R2 CORS.** Paste a small JSON blob into the R2 dashboard or run `wrangler r2 bucket cors put`. Details: [R2 + CORS setup](#r2--cors-setup).
+4. **Set `CRON_SECRET`.** `wrangler secret put CRON_SECRET` (`openssl rand -hex 16`). Required for the scheduled cleanup jobs to run. Details: [Scheduled cleanup](#scheduled-cleanup-cron-triggers).
 
 Then wire up your Capacitor app (see [Client setup](#client-setup-capacitor-app-side)) and register your first app via the dashboard or `pnpx capgo-update-lite-cli apps add`.
 
@@ -58,7 +59,7 @@ pnpm db:push     # apply schema to your Postgres
 pnpm deploy      # vite build + wrangler deploy
 ```
 
-After the first deploy, run the post-deploy steps from the quickstart (R2 secrets and CORS; the `db:push` above already handled the schema).
+After the first deploy, run the post-deploy steps from the quickstart (R2 secrets, CORS, and `CRON_SECRET`; the `db:push` above already handled the schema).
 
 ## Postgres + Drizzle setup
 
@@ -91,7 +92,7 @@ For a manual deploy, paste the ID into `packages/app/wrangler.jsonc` yourself:
 pnpm db:push       # fastest path for first-time setup
 ```
 
-Schema source: [`packages/app/src/lib/server/db/schema.ts`](./packages/app/src/lib/server/db/schema.ts), defining three tables (`apps`, `bundles`, `stats_events`). Existing migration SQL lives under `packages/app/drizzle/`.
+Schema source: [`packages/app/src/lib/server/db/schema.ts`](./packages/app/src/lib/server/db/schema.ts), defining four tables (`apps`, `bundles`, `stats_events`, `admin_tokens`). Existing migration SQL lives under `packages/app/drizzle/`.
 
 ## R2 + CORS setup
 
@@ -132,6 +133,23 @@ Alternatively, from the CLI, save the JSON as `cors.json` and run (omit `--juris
 ```sh
 wrangler r2 bucket cors put <your-bucket-name> --rules ./cors.json --jurisdiction eu
 ```
+
+## Scheduled cleanup (cron triggers)
+
+The Worker registers two Cloudflare Cron Triggers (declared in [`wrangler.jsonc`](./packages/app/wrangler.jsonc) under `triggers.crons`):
+
+| Schedule                       | Job             | Behavior                                                                                                                                 |
+| ------------------------------ | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `0 3 * * *` (daily, 03:00 UTC) | `prune-stats`   | Deletes `stats_events` older than `STATS_RETENTION_DAYS` (default 90, set 0 to disable).                                                 |
+| `0 * * * *` (hourly)           | `prune-orphans` | Deletes `bundles` rows still in `state='pending'` after 24h (init→commit flows that never completed) and their R2 objects (best-effort). |
+
+Both jobs are gated by `CRON_SECRET`. Set it once after deploy:
+
+```sh
+wrangler secret put CRON_SECRET   # paste an `openssl rand -hex 16`
+```
+
+Without it, every scheduled invocation logs `[cron] CRON_SECRET not set — refusing to run` and the job is skipped. The actual prune logic lives behind regular HTTP routes (`/cron/prune-stats`, `/cron/prune-orphans`); the snippet appended to `_worker.js` by [`cron/append.mjs`](./packages/app/cron/append.mjs) just fires synthetic requests at them.
 
 ## Client setup (Capacitor app side)
 
@@ -230,11 +248,32 @@ See [`packages/cli/README.md`](./packages/cli/README.md) for the full flag refer
 
 ## Dashboard + API
 
-- **`/dashboard`**: web UI. Log in with your `PRIVATE_ADMIN_TOKEN`.
+- **`/dashboard`**: web UI. Log in with your `PRIVATE_ADMIN_TOKEN` or any token issued via `/dashboard/admin/tokens`.
 - **`/updates`, `/stats`**: plugin-facing routes that match the `@capgo/capacitor-updater` server spec.
 - **`/health`**: liveness / readiness probe.
 - **`/admin/*`**: admin routes consumed by the CLI (bearer auth).
 - **`/openapi.json`** and **`/docs`**: OpenAPI spec and a Scalar-rendered UI.
+
+## Auth model
+
+There are two ways to authenticate with `/admin/*` and the dashboard:
+
+1. **`PRIVATE_ADMIN_TOKEN`** — the build-time secret. Always treated as a `admin`-role super-admin and bypasses the database entirely. Set it in `.env` (or the Cloudflare build-time variable). Rotating it invalidates every issued dashboard session.
+2. **DB-backed admin tokens** — issued via `/dashboard/admin/tokens` (admin role only). Each token has a role; the plaintext is shown exactly once on creation, only `sha256(plaintext)` is stored.
+
+### Roles
+
+| Role        | Can do                                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| `viewer`    | Read-only dashboard + `GET` admin endpoints. No mutations.                                                     |
+| `publisher` | Viewer + bundle CRUD: publish (`POST /admin/bundles/init` + `commit`), edit, soft-delete, promote, reactivate. |
+| `admin`     | Full access: app CRUD, per-app policy, token management.                                                       |
+
+CI pipelines should use `publisher` tokens. Reserve `admin` for humans operating the dashboard or rotating tokens.
+
+### Revocation
+
+Revoking a DB-backed token from the dashboard takes effect immediately for new requests, but existing dashboard sessions issued from that token stay valid until expiry (the cookie is HMAC'd with `PRIVATE_ADMIN_TOKEN`, not the user's token). To force a global logout, rotate `PRIVATE_ADMIN_TOKEN`.
 
 ## How it works
 
@@ -283,12 +322,15 @@ sequenceDiagram
 
 ### Environment variables
 
-| Name                   | Where                                                   | Purpose                                       |
-| ---------------------- | ------------------------------------------------------- | --------------------------------------------- |
-| `PRIVATE_ADMIN_TOKEN`  | `.env` (build-time; baked in via `$env/static/private`) | Bearer token for `/admin/*` + dashboard login |
-| `R2_S3_ENDPOINT`       | `wrangler secret put`                                   | R2 S3-compatible endpoint URL                 |
-| `R2_ACCESS_KEY_ID`     | `wrangler secret put`                                   | R2 API token access key                       |
-| `R2_SECRET_ACCESS_KEY` | `wrangler secret put`                                   | matching secret                               |
+| Name                      | Where                                                   | Purpose                                                                                   |
+| ------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `PRIVATE_ADMIN_TOKEN`     | `.env` (build-time; baked in via `$env/static/private`) | Bootstrap super-admin bearer token for `/admin/*` + dashboard login. Always role `admin`. |
+| `R2_S3_ENDPOINT`          | `wrangler secret put`                                   | R2 S3-compatible endpoint URL                                                             |
+| `R2_ACCESS_KEY_ID`        | `wrangler secret put`                                   | R2 API token access key                                                                   |
+| `R2_SECRET_ACCESS_KEY`    | `wrangler secret put`                                   | matching secret                                                                           |
+| `R2_DOWNLOAD_TTL_SECONDS` | `wrangler secret put` (optional)                        | Lifetime of presigned bundle GET URLs handed to devices. Default 3600 (1h).               |
+| `STATS_RETENTION_DAYS`    | `wrangler secret put` (optional)                        | Days of `stats_events` history to keep. Default 90. Set to 0/empty to disable pruning.    |
+| `CRON_SECRET`             | `wrangler secret put` (required for cron)               | Bearer token for the internal `/cron/[job]` endpoint. Without it, scheduled jobs no-op.   |
 
 ### Wrangler bindings
 

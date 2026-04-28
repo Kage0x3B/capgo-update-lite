@@ -5,7 +5,7 @@ import { deleteBundle, getBundle, patchBundle } from '$lib/server/services/bundl
 
 export const GET = defineRoute(
     {
-        auth: 'admin',
+        auth: 'viewer',
         params: BundleIdParamsSchema,
         response: BundleSchema,
         meta: {
@@ -20,7 +20,7 @@ export const GET = defineRoute(
 
 export const PATCH = defineRoute(
     {
-        auth: 'admin',
+        auth: 'publisher',
         params: BundleIdParamsSchema,
         body: BundlePatchSchema,
         response: BundleSchema,
@@ -37,7 +37,7 @@ export const PATCH = defineRoute(
 
 export const DELETE = defineRoute(
     {
-        auth: 'admin',
+        auth: 'publisher',
         params: BundleIdParamsSchema,
         query: BundleDeleteQuerySchema,
         response: BundleDeleteResponseSchema,

@@ -325,9 +325,7 @@ export function registerBundles(program: Command): void {
                     r.attemptedDevices === 0 ? '—' : (r.failRate * 100).toFixed(1) + '%'
                 ])
             );
-            const flagged = rows.filter(
-                (r) => r.severity !== 'healthy' && r.severity !== 'manually_disabled'
-            ).length;
+            const flagged = rows.filter((r) => r.severity !== 'healthy' && r.severity !== 'manually_disabled').length;
             done(
                 flagged === 0
                     ? `${rows.length} bundle${rows.length === 1 ? '' : 's'}, all healthy`

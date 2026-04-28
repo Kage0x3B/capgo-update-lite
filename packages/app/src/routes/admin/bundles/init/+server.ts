@@ -5,7 +5,7 @@ import { initBundle } from '$lib/server/services/bundles.js';
 
 export const POST = defineRoute(
     {
-        auth: 'admin',
+        auth: 'publisher',
         body: BundleInitSchema,
         response: BundleInitResponseSchema,
         meta: {

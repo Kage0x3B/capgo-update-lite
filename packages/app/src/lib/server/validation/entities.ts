@@ -88,7 +88,9 @@ export const AppSchema = v.pipe(
         failRiskRate: v.nullable(
             v.pipe(
                 v.number(),
-                v.description('Per-app override for the at-risk-severity threshold (0..1). Null falls back to default.'),
+                v.description(
+                    'Per-app override for the at-risk-severity threshold (0..1). Null falls back to default.'
+                ),
                 v.examples([0.35])
             )
         ),
@@ -348,6 +350,41 @@ export const StatsBatchResponseSchema = v.pipe(
 /** Combined /stats response (body can be single event or batch). */
 export const StatsResponseSchema = v.union([StatsSingleOkSchema, StatsBatchResponseSchema]);
 
+// --- admin tokens -----------------------------------------------------------
+
+export const AdminRoleField = v.pipe(
+    v.picklist(['viewer', 'publisher', 'admin'] as const),
+    v.description('Role granted to the token holder. Rank: viewer < publisher < admin.')
+);
+
+export const AdminTokenSummarySchema = v.pipe(
+    v.object({
+        id: v.pipe(v.number(), v.integer()),
+        name: v.string(),
+        role: AdminRoleField,
+        createdAt: v.date(),
+        createdBy: v.nullable(v.pipe(v.number(), v.integer())),
+        lastUsedAt: v.nullable(v.date()),
+        revokedAt: v.nullable(v.date()),
+        revoked: v.boolean()
+    }),
+    v.title('AdminTokenSummary'),
+    v.description('Admin token row exposed to the dashboard. The plaintext token and its hash are never included.')
+);
+
+export const AdminTokenListResponseSchema = v.array(AdminTokenSummarySchema);
+
+export const AdminTokenCreateResponseSchema = v.pipe(
+    v.object({
+        plaintext: v.pipe(
+            v.string(),
+            v.description('The raw token. Shown exactly once on creation — never returned again.')
+        ),
+        summary: AdminTokenSummarySchema
+    }),
+    v.title('AdminTokenCreateResponse')
+);
+
 // --- named-schema registry (exposed in components.schemas) ------------------
 
 /**
@@ -362,5 +399,7 @@ export const NAMED_SCHEMAS = {
     BundleHealthRow: BundleHealthRowSchema,
     AppNeedingAttention: AppNeedingAttentionSchema,
     UpdateAvailable: UpdateAvailableSchema,
-    PluginError: PluginErrorSchema
+    PluginError: PluginErrorSchema,
+    AdminTokenSummary: AdminTokenSummarySchema,
+    AdminTokenCreateResponse: AdminTokenCreateResponseSchema
 } as const;

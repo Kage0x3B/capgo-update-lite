@@ -5,7 +5,7 @@ import { reactivateBundle } from '$lib/server/services/bundles.js';
 
 export const POST = defineRoute(
     {
-        auth: 'admin',
+        auth: 'publisher',
         params: BundleIdParamsSchema,
         response: BundleSchema,
         meta: {

@@ -7,6 +7,8 @@
         "deploy": "pnpm -F ./packages/app deploy",
         "dev": "pnpm -F ./packages/app dev",
         "check": "pnpm -r check",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "db:generate": "pnpm -F ./packages/app db:generate",
@@ -16,9 +18,16 @@
         "publish-bundle": "pnpm -F ./packages/cli dev --"
     },
     "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/eslint": "^9.6.1",
+        "eslint": "^10.2.1",
+        "eslint-plugin-svelte": "^3.17.1",
+        "globals": "^17.5.0",
         "prettier": "^3.8.3",
         "prettier-plugin-svelte": "^3.5.1",
-        "prettier-plugin-tailwindcss": "0.7.3"
+        "prettier-plugin-tailwindcss": "0.7.3",
+        "svelte-eslint-parser": "^1.6.0",
+        "typescript-eslint": "^8.59.1"
     },
     "engines": {
         "node": ">=20"

@@ -245,3 +245,25 @@ export const StatsListQuerySchema = v.object({
 export const LoginSchema = v.object({
     password: v.pipe(v.string(), v.minLength(1), v.maxLength(512))
 });
+
+// --- admin tokens ---------------------------------------------------------
+
+const AdminRoleInput = v.pipe(
+    v.picklist(['viewer', 'publisher', 'admin'] as const),
+    v.description('Role granted to this token.')
+);
+
+export const AdminTokenIdParamsSchema = v.object({
+    id: v.pipe(v.string(), v.regex(/^[1-9][0-9]*$/), v.transform(Number), v.integer(), v.minValue(1))
+});
+
+export const AdminTokenCreateSchema = v.object({
+    name: v.pipe(
+        v.string(),
+        v.minLength(1),
+        v.maxLength(100),
+        v.description('Human label, shown on the management page.'),
+        v.examples(['CI publish'])
+    ),
+    role: AdminRoleInput
+});

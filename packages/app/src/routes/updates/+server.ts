@@ -79,20 +79,23 @@ export const POST = defineRoute(
         // appear as duplicates across endpoints.
         const deviceId = body.device_id.toLowerCase();
 
-        const [app] = await db.select().from(apps).where(eq(apps.id, body.app_id)).limit(1);
-        if (!app) return err200('no_app', `Unknown app_id: ${body.app_id}`);
-
+        // Single round-trip: LEFT JOIN apps→bundles so app-existence and bundle
+        // resolution land in one query. If the app doesn't exist we get zero
+        // rows; if the app exists but no bundle matches we get a row with a
+        // null bundle.
+        //
         // Per-device blacklist: skip bundles that this device has already failed
         // on. Backed by the partial index stats_events_device_failure_idx so
         // this is an index-only probe per candidate. The order-by + limit 1
         // means the resolver naturally falls through to the next-newest active
         // bundle if the newest is blacklisted.
         const rows = await db
-            .select()
-            .from(bundles)
-            .where(
+            .select({ app: apps, bundle: bundles })
+            .from(apps)
+            .leftJoin(
+                bundles,
                 and(
-                    eq(bundles.appId, body.app_id),
+                    eq(bundles.appId, apps.id),
                     eq(bundles.channel, body.defaultChannel ?? 'production'),
                     eq(bundles.active, true),
                     eq(bundles.state, 'active'),
@@ -111,10 +114,14 @@ export const POST = defineRoute(
                     )`
                 )
             )
+            .where(eq(apps.id, body.app_id))
             .orderBy(sql`${bundles.releasedAt} DESC NULLS LAST`)
             .limit(1);
 
-        const bundle = rows[0];
+        const row = rows[0];
+        if (!row) return err200('no_app', `Unknown app_id: ${body.app_id}`);
+
+        const { app, bundle } = row;
         if (!bundle) return err200('no_bundle', 'Cannot get bundle');
 
         let shouldUpdate: boolean;

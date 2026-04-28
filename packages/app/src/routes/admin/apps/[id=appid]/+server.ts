@@ -5,7 +5,7 @@ import { getApp, patchApp } from '$lib/server/services/apps.js';
 
 export const GET = defineRoute(
     {
-        auth: 'admin',
+        auth: 'viewer',
         params: AppIdParamsSchema,
         response: AppSchema,
         meta: {

@@ -245,15 +245,33 @@
                         </div>
                     </div>
                     <dl class="text-surface-600-400 grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
-                        <div><dt class="inline">id</dt> <dd class="inline">{b.id}</dd></div>
-                        <div><dt class="inline">channel</dt> <dd class="inline">{b.channel}</dd></div>
-                        <div><dt class="inline">android ≥</dt> <dd class="inline"><code>{b.minAndroidBuild}</code></dd></div>
-                        <div><dt class="inline">ios ≥</dt> <dd class="inline"><code>{b.minIosBuild}</code></dd></div>
+                        <div>
+                            <dt class="inline">id</dt>
+                            <dd class="inline">{b.id}</dd>
+                        </div>
+                        <div>
+                            <dt class="inline">channel</dt>
+                            <dd class="inline">{b.channel}</dd>
+                        </div>
+                        <div>
+                            <dt class="inline">android ≥</dt>
+                            <dd class="inline"><code>{b.minAndroidBuild}</code></dd>
+                        </div>
+                        <div>
+                            <dt class="inline">ios ≥</dt>
+                            <dd class="inline"><code>{b.minIosBuild}</code></dd>
+                        </div>
                         {#if b.platforms.length > 0}
-                            <div class="col-span-2"><dt class="inline">platforms</dt> <dd class="inline">{b.platforms.join(', ')}</dd></div>
+                            <div class="col-span-2">
+                                <dt class="inline">platforms</dt>
+                                <dd class="inline">{b.platforms.join(', ')}</dd>
+                            </div>
                         {/if}
                         {#if b.releasedAt}
-                            <div class="col-span-2"><dt class="inline">released</dt> <dd class="inline">{fmtDate(b.releasedAt)}</dd></div>
+                            <div class="col-span-2">
+                                <dt class="inline">released</dt>
+                                <dd class="inline">{fmtDate(b.releasedAt)}</dd>
+                            </div>
                         {/if}
                     </dl>
                     {#if showAlert && hRow}
@@ -271,8 +289,7 @@
                                     type="checkbox"
                                     checked={b.active}
                                     disabled={rowBusy[b.id]}
-                                    onchange={(e) =>
-                                        toggleActive(b.id, (e.currentTarget as HTMLInputElement).checked)}
+                                    onchange={(e) => toggleActive(b.id, (e.currentTarget as HTMLInputElement).checked)}
                                 />
                                 <span>{b.active ? 'Live' : 'Paused'}</span>
                             </label>
@@ -318,10 +335,8 @@
                         </div>
                     </div>
                     {#if expandedNative[b.id] && nativeCount > 0}
-                        <div class="bg-surface-50-950 -mx-3 -mb-3 mt-2 rounded-b px-3 py-2 text-xs">
-                            <p class="text-surface-600-400 mb-2">
-                                Native-dep fingerprint captured at publish time.
-                            </p>
+                        <div class="bg-surface-50-950 -mx-3 mt-2 -mb-3 rounded-b px-3 py-2 text-xs">
+                            <p class="text-surface-600-400 mb-2">Native-dep fingerprint captured at publish time.</p>
                             <ul class="divide-surface-200-800 divide-y">
                                 {#each Object.entries(b.nativePackages).sort( ([a], [c]) => a.localeCompare(c) ) as [pkg, ver] (pkg)}
                                     <li class="flex items-baseline justify-between gap-3 py-1">

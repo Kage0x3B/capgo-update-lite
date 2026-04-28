@@ -90,15 +90,9 @@
                                 <span class="badge preset-tonal-error">patch</span>
                             {/if}
                             {#if app.disableAutoUpdateUnderNative}
-                                <ShieldCheck
-                                    class="text-success-500 size-4"
-                                    aria-label="Under-native guard on"
-                                />
+                                <ShieldCheck class="text-success-500 size-4" aria-label="Under-native guard on" />
                             {:else}
-                                <ShieldOff
-                                    class="text-warning-500 size-4"
-                                    aria-label="Under-native guard off"
-                                />
+                                <ShieldOff class="text-warning-500 size-4" aria-label="Under-native guard off" />
                             {/if}
                         </div>
                     </div>

@@ -26,15 +26,19 @@
                 <li class="space-y-1 py-2">
                     <code class="text-xs break-all">{row.app}</code>
                     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums">
-                        <span class="text-surface-600-400">active <span class="text-surface-950-50 font-medium">{row.active}</span></span>
-                        <span class="text-surface-600-400">pending
+                        <span class="text-surface-600-400"
+                            >active <span class="text-surface-950-50 font-medium">{row.active}</span></span
+                        >
+                        <span class="text-surface-600-400"
+                            >pending
                             {#if row.pending > 0}
                                 <span class="badge preset-tonal-warning">{row.pending}</span>
                             {:else}
                                 <span class="text-surface-950-50 font-medium">0</span>
                             {/if}
                         </span>
-                        <span class="text-surface-600-400">failed
+                        <span class="text-surface-600-400"
+                            >failed
                             {#if row.failed > 0}
                                 <span class="badge preset-tonal-error">{row.failed}</span>
                             {:else}

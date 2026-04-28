@@ -5,7 +5,7 @@ import { bundleHealthForApp, type BundleHealthEnv } from '$lib/server/services/b
 
 export const GET = defineRoute(
     {
-        auth: 'admin',
+        auth: 'viewer',
         params: AppIdParamsSchema,
         response: BundleHealthRowListSchema,
         meta: {
@@ -16,6 +16,5 @@ export const GET = defineRoute(
             tags: ['admin']
         }
     },
-    async ({ params, db, platform }) =>
-        bundleHealthForApp(db, platform.env as unknown as BundleHealthEnv, params.id)
+    async ({ params, db, platform }) => bundleHealthForApp(db, platform.env as unknown as BundleHealthEnv, params.id)
 );

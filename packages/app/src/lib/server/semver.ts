@@ -1,61 +1,22 @@
 /**
- * Minimal native-app version helpers.
+ * Server-side semver helpers.
  *
- * We only need:
- *  - parse: is this a syntactically valid version?
- *  - compare: strict greater-than between two versions
- *  - isNewer: does the server's candidate version supersede what the device runs?
- *
- * Strict semver requires X.Y.Z, but Apple's `CFBundleShortVersionString`
- * allows MAJOR[.MINOR[.PATCH]] (so `110`, `110.0`, and `110.0.0` are all
- * valid Apple versions) and Google Play's `versionName` is even looser. To
- * accept what these platforms actually ship, we treat missing minor/patch
- * as 0. The pre-release suffix is still parsed for ordering.
+ * Parsing primitives live in `capgo-update-lite-shared/semver` so the CLI and
+ * server agree on what counts as a valid native-app version. This module adds
+ * the server-only update-decision helpers (isNewer, upgradeClass,
+ * isUpgradeBlocked) used by /updates and the analytics pipeline.
  *
  * `version_name` from the plugin carries two special sentinels — 'builtin'
  * (no JS bundle applied yet) and 'unknown' (a prior bundle failed). Both are
  * treated as "always update" and never parsed as a version.
- *
- * Mirrors `packages/cli/src/semver.ts` — keep the two in sync.
  */
 
-const SEMVER_RE = /^(\d+)(?:\.(\d+)(?:\.(\d+))?)?(?:-([0-9A-Za-z-.]+))?(?:\+([0-9A-Za-z-.]+))?$/;
+import { compareSemver, isValidSemver, parseSemver, type Semver } from 'capgo-update-lite-shared/semver';
 
-export type ParsedSemver = {
-    major: number;
-    minor: number;
-    patch: number;
-    prerelease: string | null;
-};
+export { compareSemver, isValidSemver, parseSemver };
 
-export function parseSemver(input: string): ParsedSemver | null {
-    const m = SEMVER_RE.exec(input);
-    if (!m) return null;
-    return {
-        major: Number(m[1]),
-        minor: m[2] !== undefined ? Number(m[2]) : 0,
-        patch: m[3] !== undefined ? Number(m[3]) : 0,
-        prerelease: m[4] ?? null
-    };
-}
-
-export function isValidSemver(input: string): boolean {
-    return parseSemver(input) !== null;
-}
-
-/** Returns 1 if a>b, -1 if a<b, 0 if equal. Prerelease ordering is simplified:
- * any prerelease < no-prerelease at same major.minor.patch. */
-export function compareSemver(a: ParsedSemver, b: ParsedSemver): number {
-    if (a.major !== b.major) return a.major > b.major ? 1 : -1;
-    if (a.minor !== b.minor) return a.minor > b.minor ? 1 : -1;
-    if (a.patch !== b.patch) return a.patch > b.patch ? 1 : -1;
-    const ap = a.prerelease;
-    const bp = b.prerelease;
-    if (ap === bp) return 0;
-    if (ap === null) return 1;
-    if (bp === null) return -1;
-    return ap > bp ? 1 : -1;
-}
+/** Backwards-compatible alias for the legacy server type name. */
+export type ParsedSemver = Semver;
 
 /**
  * True if `candidate` is strictly newer than what the device is currently

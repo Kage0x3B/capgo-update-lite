@@ -2,13 +2,25 @@ import { error, isHttpError, json, type RequestEvent, type RequestHandler } from
 import * as v from 'valibot';
 import type { BaseIssue, BaseSchema, InferOutput } from 'valibot';
 import { createDb, type Db } from './db/index.js';
-import { requireAdmin } from './auth.js';
+import { authenticateBearer } from './auth.js';
+import { meetsRole, type AdminRole, type ResolvedAuth } from './roles.js';
 import { err200 } from './responses.js';
 
 type AnySchema = BaseSchema<unknown, unknown, BaseIssue<unknown>>;
 type Output<S extends AnySchema | undefined> = S extends AnySchema ? InferOutput<S> : undefined;
 
-export type AuthStrategy = 'none' | 'admin' | ((event: RequestEvent) => void | Promise<void>);
+/**
+ * Auth strategy for a route.
+ *
+ * - `'none'`        — no Bearer required.
+ * - `'viewer'`      — any non-revoked token (or PRIVATE_ADMIN_TOKEN).
+ * - `'publisher'`   — publisher-or-admin token.
+ * - `'admin'`       — admin-only.
+ * - `(event) => …`  — custom check. Throws `error(...)` on failure.
+ *
+ * Default is `'admin'` so accidentally omitting `auth:` fails closed.
+ */
+export type AuthStrategy = 'none' | AdminRole | ((event: RequestEvent) => void | Promise<void>);
 
 export type ErrorMode = 'throw' | 'err200';
 
@@ -47,9 +59,9 @@ export interface RouteConfig<
     R extends AnySchema | undefined = undefined
 > {
     /**
-     * Auth strategy. Defaults to `'admin'` (calls requireAdmin) — routes that
-     * should be reachable without a token must opt out explicitly with `'none'`,
-     * so accidentally omitting `auth:` fails closed.
+     * Auth strategy. Defaults to `'admin'` — routes that should be reachable
+     * without a token must opt out explicitly with `'none'`, so accidentally
+     * omitting `auth:` fails closed. See `AuthStrategy` for role semantics.
      */
     auth?: AuthStrategy;
     /** Valibot schema for JSON body. */
@@ -93,11 +105,26 @@ export interface RouteEvent<
     /** Parsed & validated route params (or the raw SvelteKit params when no schema). */
     params: P extends AnySchema ? InferOutput<P> : RequestEvent['params'];
     /**
+     * Resolved auth (role + token id) for the request, or null when the route
+     * is configured with `auth: 'none'` and no token was presented.
+     * Populated by the wrapper before the handler runs.
+     */
+    readonly auth: ResolvedAuth | null;
+    /**
      * Lazy Drizzle instance. First access opens a pooled postgres connection through
      * Hyperdrive; subsequent accesses return the same connection. The wrapper schedules
      * `platform.ctx.waitUntil(close())` in its finally block — only if you accessed it.
      */
     readonly db: Db;
+    /**
+     * Schedule a promise to run past the response but before the lazy DB connection
+     * closes. Use for off-the-hot-path work that still needs `event.db` (e.g.
+     * background re-evaluations). The wrapper chains `db.close()` after the
+     * deferred promises settle, so they're guaranteed not to race with connection
+     * teardown. For work that doesn't touch the DB, prefer
+     * `platform.ctx.waitUntil()` directly.
+     */
+    defer(promise: Promise<unknown>): void;
 }
 
 type RouteReturn<R extends AnySchema | undefined> = R extends AnySchema ? InferOutput<R> : unknown;
@@ -176,10 +203,22 @@ export function defineRoute<
             return fail(errorMode, 500, 'server_misconfigured', 'Platform bindings missing');
         }
 
+        // lazy db — only instantiated if the auth check or handler reads it.
+        // Held in a ref so TS doesn't over-narrow the let binding to `null`.
+        const dbRef: { current: { db: Db; close: () => Promise<void> } | null } = { current: null };
+        const getDb = (): Db => {
+            if (!dbRef.current) dbRef.current = createDb(platform.env.HYPERDRIVE);
+            return dbRef.current.db;
+        };
+
         // auth
+        let resolvedAuth: ResolvedAuth | null = null;
         try {
-            if (auth === 'admin') {
-                requireAdmin(event.request);
+            if (auth === 'viewer' || auth === 'publisher' || auth === 'admin') {
+                resolvedAuth = await authenticateBearer(event.request, getDb());
+                if (!resolvedAuth) throw error(401, 'unauthorized');
+                if (!meetsRole(resolvedAuth.role, auth)) throw error(403, 'forbidden');
+                event.locals.auth = resolvedAuth;
             } else if (typeof auth === 'function') {
                 await auth(event);
             }
@@ -224,13 +263,12 @@ export function defineRoute<
             params = parsed.output;
         }
 
-        // lazy db — only instantiated if the handler reads `event.db`. We expose just the
-        // drizzle instance and keep close() internal so route code stays `db.select(...)` clean.
-        // Held in a ref object so TS doesn't over-narrow the let binding to `null`.
-        const dbRef: { current: { db: Db; close: () => Promise<void> } | null } = { current: null };
-        const getDb = (): Db => {
-            if (!dbRef.current) dbRef.current = createDb(platform.env.HYPERDRIVE);
-            return dbRef.current.db;
+        // Background work registered via event.defer(). The DB close in the
+        // finally block waits for these to settle so deferred handlers can keep
+        // using event.db without racing connection teardown.
+        const deferred: Promise<unknown>[] = [];
+        const defer = (promise: Promise<unknown>): void => {
+            deferred.push(promise);
         };
 
         const routeEvent = new Proxy(event as unknown as Record<string | symbol, unknown>, {
@@ -240,6 +278,8 @@ export function defineRoute<
                 if (prop === 'query') return query;
                 if (prop === 'params') return params;
                 if (prop === 'db') return getDb();
+                if (prop === 'defer') return defer;
+                if (prop === 'auth') return resolvedAuth;
                 return Reflect.get(target, prop, receiver);
             }
         }) as unknown as RouteEvent<B, Q, P>;
@@ -252,7 +292,13 @@ export function defineRoute<
         } catch (e) {
             return handleThrown(e, errorMode);
         } finally {
-            if (dbRef.current) platform.ctx.waitUntil(dbRef.current.close());
+            const handle = dbRef.current;
+            if (deferred.length > 0) {
+                const tail = Promise.allSettled(deferred).then(() => handle?.close());
+                platform.ctx.waitUntil(tail);
+            } else if (handle) {
+                platform.ctx.waitUntil(handle.close());
+            }
         }
     };
 

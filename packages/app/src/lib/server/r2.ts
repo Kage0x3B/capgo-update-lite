@@ -6,7 +6,22 @@ export type R2Env = {
     R2_S3_ENDPOINT: string;
     R2_ACCESS_KEY_ID: string;
     R2_SECRET_ACCESS_KEY: string;
+    /** Lifetime of the presigned GET URL handed to devices, in seconds. Default 3600 (1h). */
+    R2_DOWNLOAD_TTL_SECONDS?: string;
 };
+
+/** Bounds for `R2_DOWNLOAD_TTL_SECONDS`. AWS SigV4 caps presigns at 7 days. */
+const MIN_DOWNLOAD_TTL = 60;
+const MAX_DOWNLOAD_TTL = 7 * 24 * 60 * 60;
+const DEFAULT_DOWNLOAD_TTL = 3600;
+
+export function resolveDownloadTtl(env: R2Env): number {
+    const raw = env.R2_DOWNLOAD_TTL_SECONDS;
+    if (raw === undefined || raw === '') return DEFAULT_DOWNLOAD_TTL;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return DEFAULT_DOWNLOAD_TTL;
+    return Math.max(MIN_DOWNLOAD_TTL, Math.min(MAX_DOWNLOAD_TTL, Math.floor(n)));
+}
 
 function s3Endpoint(env: R2Env): string {
     if (!env.R2_S3_ENDPOINT) throw new Error('R2_S3_ENDPOINT not configured');
@@ -43,8 +58,16 @@ export async function presignPut(env: R2Env, key: string, ttlSeconds = 900): Pro
     return signed.url;
 }
 
-/** Presigned GET URL handed to the device plugin in /updates responses. */
-export async function presignGet(env: R2Env, key: string, ttlSeconds = 900): Promise<string> {
+/**
+ * Presigned GET URL handed to the device plugin in /updates responses. Default
+ * TTL is `R2_DOWNLOAD_TTL_SECONDS` from env (1h fallback) — devices on slow
+ * networks need enough time to fetch the manifest, then download the bundle.
+ */
+export async function presignGet(
+    env: R2Env,
+    key: string,
+    ttlSeconds: number = resolveDownloadTtl(env)
+): Promise<string> {
     const url = new URL(objectUrl(env, key));
     url.searchParams.set('X-Amz-Expires', String(ttlSeconds));
     const signed = await client(env).sign(new Request(url, { method: 'GET' }), {

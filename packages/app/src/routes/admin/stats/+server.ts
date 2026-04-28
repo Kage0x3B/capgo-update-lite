@@ -5,7 +5,7 @@ import { listStatsEvents } from '$lib/server/services/stats.js';
 
 export const GET = defineRoute(
     {
-        auth: 'admin',
+        auth: 'viewer',
         query: StatsListQuerySchema,
         response: StatsEventListResponseSchema,
         meta: {

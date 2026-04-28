@@ -44,7 +44,26 @@
             "binding": "BUNDLES",
             "bucket_name": "capgo-update-lite-bundles"
         }
-    ]
+    ],
+    // -------------------------------------------------------------------------
+    // Cron Triggers — wired to `worker_default.scheduled` in cron/job.js,
+    // appended to the SvelteKit-generated `_worker.js` by cron/append.mjs as
+    // a postbuild step. Edit the cron expressions here AND in cron/job.js
+    // together: the dispatcher matches on the literal cron string in
+    // `event.cron`.
+    //
+    //   - 0 3 * * *  daily 03:00 UTC — prune stats_events older than
+    //                STATS_RETENTION_DAYS (default 90).
+    //   - 0 * * * *  hourly — delete bundles stuck in state='pending' for
+    //                more than 24h (orphaned init→commit flows) and their
+    //                R2 objects (best-effort).
+    //
+    // The cron handler authenticates via CRON_SECRET (wrangler secret put);
+    // without it the scheduled jobs log a refusal and skip.
+    // -------------------------------------------------------------------------
+    "triggers": {
+        "crons": ["0 3 * * *", "0 * * * *"]
+    }
     // -------------------------------------------------------------------------
     // Custom domain (optional). Without a `route` block the Worker is served
     // at `<name>.<account>.workers.dev`. To use a custom domain, uncomment and
@@ -56,10 +75,13 @@
     //   }
     // -------------------------------------------------------------------------
 
-    // Additional secrets (not in wrangler.jsonc — set via `wrangler secret put`):
-    //   R2_S3_ENDPOINT       — https://<account-id>.<region>.r2.cloudflarestorage.com
-    //   R2_ACCESS_KEY_ID     — R2 API token access key scoped to the bundles bucket
-    //   R2_SECRET_ACCESS_KEY — matching secret key
+    // Runtime secrets (set via `wrangler secret put`):
+    //   R2_S3_ENDPOINT          — https://<account-id>.<region>.r2.cloudflarestorage.com
+    //   R2_ACCESS_KEY_ID        — R2 API token access key scoped to the bundles bucket
+    //   R2_SECRET_ACCESS_KEY    — matching secret key
+    //   CRON_SECRET             — required for the cron triggers above to fire
+    //   R2_DOWNLOAD_TTL_SECONDS — optional; presigned bundle GET URL TTL in seconds (default 3600)
+    //   STATS_RETENTION_DAYS    — optional; days of stats_events to keep (default 90, 0 disables)
     //
     // Build-time env var (set in `.env` or CF Workers Builds → Variables):
     //   PRIVATE_ADMIN_TOKEN  — baked into the bundle via `$env/static/private`

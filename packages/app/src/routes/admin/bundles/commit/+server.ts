@@ -5,7 +5,7 @@ import { commitBundle } from '$lib/server/services/bundles.js';
 
 export const POST = defineRoute(
     {
-        auth: 'admin',
+        auth: 'publisher',
         body: BundleCommitSchema,
         response: BundleSchema,
         meta: {
