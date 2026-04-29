@@ -152,9 +152,7 @@ export const POST = defineRoute(
         //   3. semver_error — fell back from isNewer throwing on every
         //      candidate (rare; usually means body.version_name is corrupt).
         let chosen: Bundle | null = null;
-        let firstBlocked:
-            | { code: UpdatesErrorCode; message: string; extra?: Record<string, unknown> }
-            | null = null;
+        let firstBlocked: { code: UpdatesErrorCode; message: string; extra?: Record<string, unknown> } | null = null;
         let firstSemverError: string | null = null;
         let sawNotNewer = false;
         for (const bundle of candidates) {

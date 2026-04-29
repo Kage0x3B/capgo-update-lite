@@ -157,7 +157,9 @@ export const BundleCommitSchema = v.object({
     activate: v.optional(
         v.pipe(
             v.boolean(),
-            v.description('If true, marks this bundle active. Siblings in (app_id, channel) stay active — guards in /updates pick per device.')
+            v.description(
+                'If true, marks this bundle active. Siblings in (app_id, channel) stay active — guards in /updates pick per device.'
+            )
         )
     )
 });
