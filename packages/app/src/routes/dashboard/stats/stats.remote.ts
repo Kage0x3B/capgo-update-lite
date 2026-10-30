@@ -7,6 +7,7 @@ import { listStatsEvents } from '$lib/server/services/stats.js';
 const FiltersSchema = v.object({
     app_id: v.optional(v.string()),
     action: v.optional(v.string()),
+    device_id: v.optional(v.pipe(v.string(), v.maxLength(64))),
     since: v.optional(v.string()),
     until: v.optional(v.string()),
     limit: v.optional(v.number())
@@ -18,6 +19,7 @@ export const getStatsEvents = query(FiltersSchema, async (f) => {
         listStatsEvents(db, {
             app_id: f.app_id || undefined,
             action: f.action || undefined,
+            device_id: f.device_id || undefined,
             since: f.since ? new Date(f.since) : undefined,
             until: f.until ? new Date(f.until) : undefined,
             limit: f.limit ?? 200

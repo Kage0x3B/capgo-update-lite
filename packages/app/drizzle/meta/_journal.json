@@ -43,6 +43,13 @@
       "when": 1777381125471,
       "tag": "0005_mushy_liz_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793367402458,
+      "tag": "0006_stats_debug_data",
+      "breakpoints": true
     }
   ]
 }

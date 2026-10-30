@@ -241,6 +241,9 @@ export const StatsListQuerySchema = v.object({
             v.examples(['update'])
         )
     ),
+    device_id: v.optional(
+        v.pipe(v.string(), v.minLength(1), v.maxLength(64), v.description('Only events from this device.'))
+    ),
     since: v.optional(v.pipe(ISO_DATE, v.description('Only events received at or after this timestamp.'))),
     until: v.optional(v.pipe(ISO_DATE, v.description('Only events received strictly before.'))),
     limit: v.optional(

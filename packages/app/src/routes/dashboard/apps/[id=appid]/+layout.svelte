@@ -19,6 +19,11 @@
             match: (path, id) => path.startsWith(`/dashboard/apps/${id}/stats`)
         },
         {
+            href: (id) => `/dashboard/apps/${id}/devices`,
+            label: 'Devices',
+            match: (path, id) => path.startsWith(`/dashboard/apps/${id}/devices`)
+        },
+        {
             href: (id) => `/dashboard/apps/${id}/settings`,
             label: 'Settings',
             match: (path, id) => path.startsWith(`/dashboard/apps/${id}/settings`)

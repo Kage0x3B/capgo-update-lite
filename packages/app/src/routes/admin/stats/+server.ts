@@ -12,7 +12,7 @@ export const GET = defineRoute(
             operationId: 'listStatsEvents',
             summary: 'List recent plugin stats events',
             description:
-                'Read-only view of stats_events rows, filterable by app_id, action, and received_at window. Ordered newest-first; capped at 1000 rows.',
+                'Read-only view of stats_events rows, filterable by app_id, action, device_id, and received_at window. Ordered newest-first; capped at 1000 rows.',
             tags: ['admin']
         }
     },

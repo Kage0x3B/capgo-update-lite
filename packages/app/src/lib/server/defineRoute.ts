@@ -89,6 +89,19 @@ export interface RouteConfig<
      * the generic `PluginError` (`error: string`) to `error: enum[...]`.
      */
     errorCodes?: readonly string[];
+    /**
+     * Called when the JSON body parses but fails the `body` schema, before the
+     * error response is sent. Lets plugin routes record refused requests. The
+     * wrapper closes the DB once the returned promise settles.
+     */
+    onInvalidBody?: (ctx: InvalidBodyContext) => Promise<unknown> | void;
+}
+
+export interface InvalidBodyContext {
+    raw: unknown;
+    message: string;
+    platform: NonNullable<RequestEvent['platform']>;
+    readonly db: Db;
 }
 
 export interface RouteEvent<
@@ -237,7 +250,25 @@ export function defineRoute<
             }
             const parsed = v.safeParse(config.body, raw);
             if (!parsed.success) {
-                return fail(errorMode, 400, 'invalid_request', issuesToMessage(parsed.issues));
+                const message = issuesToMessage(parsed.issues);
+                if (config.onInvalidBody) {
+                    const hook = config.onInvalidBody;
+                    const work = Promise.resolve()
+                        .then(() =>
+                            hook({
+                                raw,
+                                message,
+                                platform,
+                                get db() {
+                                    return getDb();
+                                }
+                            })
+                        )
+                        .catch((e) => console.error('[defineRoute] onInvalidBody failed', e))
+                        .then(() => dbRef.current?.close());
+                    platform.ctx.waitUntil(work);
+                }
+                return fail(errorMode, 400, 'invalid_request', message);
             }
             body = parsed.output;
         }

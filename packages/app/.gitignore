@@ -1,0 +1,3 @@
+
+# Local prod deploy config (real Hyperdrive id, EU bucket, keep_vars). Not a template.
+wrangler.prod.jsonc

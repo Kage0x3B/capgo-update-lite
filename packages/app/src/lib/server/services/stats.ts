@@ -5,6 +5,7 @@ import type { Db } from '$lib/server/db/index.js';
 export type StatsListFilters = {
     app_id?: string;
     action?: string;
+    device_id?: string;
     since?: Date;
     until?: Date;
     limit?: number;
@@ -17,6 +18,7 @@ export async function listStatsEvents(db: Db, filters: StatsListFilters): Promis
     const where = [
         filters.app_id ? eq(statsEvents.appId, filters.app_id) : undefined,
         filters.action ? eq(statsEvents.action, filters.action) : undefined,
+        filters.device_id ? eq(statsEvents.deviceId, filters.device_id.toLowerCase()) : undefined,
         filters.since ? gte(statsEvents.receivedAt, filters.since) : undefined,
         filters.until ? lte(statsEvents.receivedAt, filters.until) : undefined
     ].filter((x): x is Exclude<typeof x, undefined> => x !== undefined);
@@ -25,7 +27,9 @@ export async function listStatsEvents(db: Db, filters: StatsListFilters): Promis
         .select()
         .from(statsEvents)
         .where(where.length ? and(...where) : undefined)
-        .orderBy(desc(statsEvents.receivedAt))
+        // Per app, (app_id, received_at) serves the order. Across apps the
+        // primary key does: ids follow insert order.
+        .orderBy(filters.app_id ? desc(statsEvents.receivedAt) : desc(statsEvents.id))
         .limit(Math.min(filters.limit ?? 200, 1000))
         .offset(filters.offset ?? 0);
 

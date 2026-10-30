@@ -15,6 +15,19 @@ import { compareSemver, isValidSemver, parseSemver, type Semver } from 'capgo-up
 
 export { compareSemver, isValidSemver, parseSemver };
 
+/**
+ * Comparator for display lists: newest semver first. Strings that aren't
+ * semver (e.g. 'builtin') sort after every version, alphabetically.
+ */
+export function compareVersionsDesc(a: string, b: string): number {
+    const av = parseSemver(a);
+    const bv = parseSemver(b);
+    if (av && bv) return compareSemver(bv, av);
+    if (av) return -1;
+    if (bv) return 1;
+    return a.localeCompare(b);
+}
+
 /** Backwards-compatible alias for the legacy server type name. */
 export type ParsedSemver = Semver;
 

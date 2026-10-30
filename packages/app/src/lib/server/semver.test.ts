@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     compareSemver,
+    compareVersionsDesc,
     isNewer,
     isUpgradeBlocked,
     isValidSemver,
@@ -157,5 +158,20 @@ describe('isUpgradeBlocked (4x4 matrix)', () => {
 
     it.each(cases)('blocked=$blocked × actual=$actual → $result', ({ blocked, actual, result }) => {
         expect(isUpgradeBlocked(actual, blocked)).toBe(result);
+    });
+});
+
+describe('compareVersionsDesc', () => {
+    it('sorts newest semver first and non-semver last', () => {
+        const list = ['1.9.0', 'builtin', '1.10.0', '1000.3.8', '2.0.0-beta.1', '2.0.0', 'abc'];
+        expect(list.sort(compareVersionsDesc)).toEqual([
+            '1000.3.8',
+            '2.0.0',
+            '2.0.0-beta.1',
+            '1.10.0',
+            '1.9.0',
+            'abc',
+            'builtin'
+        ]);
     });
 });

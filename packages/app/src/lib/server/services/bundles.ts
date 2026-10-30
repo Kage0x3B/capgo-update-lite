@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import { ApiError } from '$lib/server/defineRoute.js';
 import { apps, bundles, type Bundle } from '$lib/server/db/schema.js';
 import type { Db } from '$lib/server/db/index.js';
-import { isValidSemver } from '$lib/server/semver.js';
+import { compareVersionsDesc, isValidSemver } from '$lib/server/semver.js';
 import { deleteObject, presignPut, sha256Hex, type R2Env } from '$lib/server/r2.js';
 
 const UPLOAD_TTL_SECONDS = 900; // 15 min
@@ -23,11 +23,19 @@ export async function listBundles(db: Db, filters: BundleListFilters): Promise<B
         filters.active !== undefined ? eq(bundles.active, filters.active) : undefined
     ].filter((x): x is Exclude<typeof x, undefined> => x !== undefined);
 
-    return db
+    const rows = await db
         .select()
         .from(bundles)
         .where(where.length ? and(...where) : undefined)
         .orderBy(desc(bundles.createdAt));
+    // Group by app and channel, newest semver first inside each channel.
+    // Creation order breaks ties for anything that isn't valid semver.
+    return rows.sort(
+        (a, b) =>
+            a.appId.localeCompare(b.appId) ||
+            a.channel.localeCompare(b.channel) ||
+            compareVersionsDesc(a.version, b.version)
+    );
 }
 
 export async function getBundle(db: Db, id: number): Promise<Bundle> {

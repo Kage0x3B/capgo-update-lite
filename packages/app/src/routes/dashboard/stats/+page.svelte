@@ -4,9 +4,10 @@
 
     let appId = $state('');
     let action = $state('');
+    let deviceId = $state('');
     let limit = $state(200);
 
-    let filters = $state({ app_id: '', action: '', limit: 200 });
+    let filters = $state({ app_id: '', action: '', device_id: '', limit: 200 });
     const rows = $derived(await getStatsEvents(filters));
 
     function applyFilters(e: SubmitEvent) {
@@ -14,6 +15,7 @@
         filters = {
             app_id: appId.trim(),
             action: action.trim(),
+            device_id: deviceId.trim(),
             limit
         };
     }
@@ -55,6 +57,10 @@
             {/each}
         </select>
     </label>
+    <label class="label flex-1">
+        <span class="label-text">Device id</span>
+        <input class="input" bind:value={deviceId} placeholder="full device UUID" />
+    </label>
     <label class="label sm:w-28">
         <span class="label-text">Limit</span>
         <input class="input" type="number" min="1" max="1000" bind:value={limit} />
@@ -77,7 +83,9 @@
                     <code class="break-all">{ev.appId}</code>
                     {#if ev.versionName}<span>v{ev.versionName}</span>{/if}
                     {#if ev.platform}<span>{ev.platform}</span>{/if}
-                    <span class="font-mono">{ev.deviceId.slice(0, 8)}…</span>
+                    <a class="anchor font-mono" href="/dashboard/apps/{ev.appId}/devices/{ev.deviceId}"
+                        >{ev.deviceId.slice(0, 8)}…</a
+                    >
                 </div>
             </li>
         {/each}
@@ -93,7 +101,9 @@
                     <th>Action</th>
                     <th>Device</th>
                     <th>Version</th>
+                    <th>Native</th>
                     <th>Platform</th>
+                    <th>Channel</th>
                 </tr>
             </thead>
             <tbody>
@@ -106,9 +116,15 @@
                         <td>
                             <span title={ev.action ?? ''}>{actionLabel(ev.action)}</span>
                         </td>
-                        <td class="text-surface-600-400 font-mono text-xs">{ev.deviceId.slice(0, 8)}…</td>
+                        <td class="font-mono text-xs">
+                            <a class="anchor" href="/dashboard/apps/{ev.appId}/devices/{ev.deviceId}"
+                                >{ev.deviceId.slice(0, 8)}…</a
+                            >
+                        </td>
                         <td>{ev.versionName ?? '—'}</td>
+                        <td class="text-xs">{ev.versionBuild ?? '—'}</td>
                         <td>{ev.platform ?? '—'}</td>
+                        <td class="text-xs">{ev.channel ?? '—'}</td>
                     </tr>
                 {/each}
             </tbody>

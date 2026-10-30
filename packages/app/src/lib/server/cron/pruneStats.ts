@@ -1,5 +1,5 @@
 import { lt } from 'drizzle-orm';
-import { statsEvents } from '../db/schema.js';
+import { statsEvents, updateChecks } from '../db/schema.js';
 import type { Db } from '../db/index.js';
 
 export const DEFAULT_STATS_RETENTION_DAYS = 90;
@@ -20,21 +20,23 @@ export function resolveRetentionDays(env: PruneStatsEnv): number | null {
 }
 
 /**
- * Delete stats_events older than the configured retention window. Returns the
- * number of rows deleted. Skips work entirely when retention is disabled.
+ * Delete stats_events and update_checks older than the configured retention
+ * window. Returns the total number of rows deleted. Skips work entirely when
+ * retention is disabled.
  */
 export async function pruneStats(db: Db, env: PruneStatsEnv): Promise<number> {
     const days = resolveRetentionDays(env);
     if (days === null) return 0;
 
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    const result = await db
-        .delete(statsEvents)
-        .where(lt(statsEvents.receivedAt, cutoff))
-        .returning({ id: statsEvents.id });
-    const count = result.length;
+    // postgres.js reports affected rows as `count`; avoids RETURNING every id.
+    const events = await db.delete(statsEvents).where(lt(statsEvents.receivedAt, cutoff));
+    const checks = await db.delete(updateChecks).where(lt(updateChecks.receivedAt, cutoff));
+    const count = events.count + checks.count;
     if (count > 0) {
-        console.log(`[cron] prune-stats: deleted ${count} stats_events rows older than ${days}d`);
+        console.log(
+            `[cron] prune-stats: deleted ${events.count} stats_events and ${checks.count} update_checks rows older than ${days}d`
+        );
     }
     return count;
 }

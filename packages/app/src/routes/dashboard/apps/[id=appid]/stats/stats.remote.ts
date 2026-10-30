@@ -5,14 +5,17 @@ import { withDb } from '$lib/server/remote-helpers.js';
 import {
     adoptionByVersion,
     autoRollbacks,
-    bundleStateSummary,
+    channelSplit,
     failureBreakdown,
     kpisForWindow,
+    nativeVersionSpread,
     platformSplit,
     pluginVersionSpread,
     recentActivity,
-    rolloutFunnel,
-    updateCheckRate
+    rolloutFunnels,
+    updateOutcomeTable,
+    updateOutcomesOverTime,
+    bucketStarts
 } from '$lib/server/services/analytics.js';
 import { DashboardWindow, windowToFilters } from '$lib/server/validation/analytics.js';
 
@@ -25,19 +28,46 @@ export const getAppDashboard = query(PerAppSchema, async (input) => {
     requireAdminSession();
     const f = { ...windowToFilters(input.window), app_id: input.app_id };
     return withDb(async (db) => {
-        const [kpis, adoption, funnel, failures, platform, plugins, rollbacks, checks, bundles, recent] =
-            await Promise.all([
-                kpisForWindow(db, f),
-                adoptionByVersion(db, f),
-                rolloutFunnel(db, f),
-                failureBreakdown(db, f),
-                platformSplit(db, f),
-                pluginVersionSpread(db, f),
-                autoRollbacks(db, f),
-                updateCheckRate(db, f),
-                bundleStateSummary(db, f.app_id),
-                recentActivity(db, f, 8)
-            ]);
-        return { kpis, adoption, funnel, failures, platform, plugins, rollbacks, checks, bundles, recent };
+        const [
+            kpis,
+            adoption,
+            outcomes,
+            outcomeTable,
+            funnels,
+            failures,
+            platform,
+            plugins,
+            native,
+            channels,
+            rollbacks,
+            recent
+        ] = await Promise.all([
+            kpisForWindow(db, f),
+            adoptionByVersion(db, f),
+            updateOutcomesOverTime(db, f),
+            updateOutcomeTable(db, f),
+            rolloutFunnels(db, f),
+            failureBreakdown(db, f),
+            platformSplit(db, f),
+            pluginVersionSpread(db, f),
+            nativeVersionSpread(db, f),
+            channelSplit(db, f),
+            autoRollbacks(db, f),
+            recentActivity(db, f, 8)
+        ]);
+        return {
+            kpis,
+            adoption,
+            outcomes: { buckets: bucketStarts(f), points: outcomes },
+            outcomeTable,
+            funnels,
+            failures,
+            platform,
+            plugins,
+            native,
+            channels,
+            rollbacks,
+            recent
+        };
     });
 });

@@ -50,16 +50,22 @@ export const UpdatesRequestSchema = v.pipe(
         plugin_version: v.pipe(
             v.string(),
             v.minLength(1),
+            v.maxLength(32),
             v.description('Version of @capgo/capacitor-updater on the device.'),
             v.examples(['6.3.0'])
         ),
         defaultChannel: v.optional(
             v.pipe(
                 v.string(),
+                v.maxLength(64),
                 v.description('Override the channel the device reads from (defaults to "production").'),
                 v.examples(['production'])
             )
         ),
+        // Not used for resolution; stored on the update_checks row for debugging.
+        version_code: v.optional(v.pipe(v.string(), v.maxLength(64))),
+        version_os: v.optional(v.pipe(v.string(), v.maxLength(64), v.description('OS version string.'))),
+        custom_id: v.optional(v.pipe(v.string(), v.maxLength(36))),
         key_id: v.optional(v.pipe(v.string(), v.maxLength(20)))
     }),
     v.title('UpdatesRequest'),
