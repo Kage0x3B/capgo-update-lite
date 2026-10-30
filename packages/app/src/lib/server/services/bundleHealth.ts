@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { apps, bundles, statsEvents, type Bundle } from '$lib/server/db/schema.js';
 import type { Db } from '$lib/server/db/index.js';
 import { BUNDLE_BREAKING_ACTIONS } from './analytics.js';
+import { compareVersionsDesc } from '$lib/server/semver.js';
 
 /**
  * Defaults for the broken-bundle severity ladder. Resolution order is always:
@@ -182,19 +183,13 @@ export async function bundleHealthForApp(db: Db, env: BundleHealthEnv, appId: st
 
     const thr = resolveThresholds(appRow, env);
 
-    const bundleRows = await db
-        .select()
-        .from(bundles)
-        .where(eq(bundles.appId, appId))
-        .orderBy(desc(bundles.releasedAt), asc(bundles.id));
+    const bundleRows = await db.select().from(bundles).where(eq(bundles.appId, appId));
     if (bundleRows.length === 0) return [];
 
-    const out: BundleHealthRow[] = [];
-    for (const b of bundleRows) {
-        const counts = await aggregateBundleCounts(db, appId, b.version, b.blacklistResetAt);
-        out.push(buildHealthRow(b, counts, thr));
-    }
-    return out;
+    const counts = await aggregateCountsForBundles(db, [appId]);
+    return bundleRows
+        .map((b) => buildHealthRow(b, counts.get(b.id) ?? NO_COUNTS, thr))
+        .sort((a, b) => a.channel.localeCompare(b.channel) || compareVersionsDesc(a.version, b.version));
 }
 
 export interface AppNeedingAttention {
@@ -223,17 +218,23 @@ export async function appsNeedingAttention(db: Db, env: BundleHealthEnv): Promis
         .from(apps);
     if (allApps.length === 0) return [];
 
+    const [allBundles, counts] = await Promise.all([
+        db.select().from(bundles),
+        aggregateCountsForBundles(
+            db,
+            allApps.map((a) => a.id)
+        )
+    ]);
     const out: AppNeedingAttention[] = [];
     for (const a of allApps) {
         const thr = resolveThresholds(a, env);
-        const bundleRows = await db.select().from(bundles).where(eq(bundles.appId, a.id));
+        const bundleRows = allBundles.filter((b) => b.appId === a.id);
         let autoDisabled = 0;
         let atRisk = 0;
         let warnings = 0;
         let noisy = 0;
         for (const b of bundleRows) {
-            const counts = await aggregateBundleCounts(db, a.id, b.version, b.blacklistResetAt);
-            const sev = classifySeverity(b, counts, thr);
+            const sev = classifySeverity(b, counts.get(b.id) ?? NO_COUNTS, thr);
             if (sev === 'auto_disabled') autoDisabled++;
             else if (sev === 'at_risk') atRisk++;
             else if (sev === 'warning') warnings++;
@@ -281,6 +282,36 @@ interface BundleCounts {
     failedDevices: number;
 }
 
+const NO_COUNTS: BundleCounts = { attemptedDevices: 0, failedDevices: 0 };
+
+/**
+ * Health counters for every bundle of the given apps in one grouped query,
+ * keyed by bundle id. Same rules as aggregateBundleCounts, including each
+ * bundle's blacklist_reset_at cutoff.
+ */
+async function aggregateCountsForBundles(db: Db, appIds: string[]): Promise<Map<number, BundleCounts>> {
+    if (appIds.length === 0) return new Map();
+    const rows = await db
+        .select({
+            id: bundles.id,
+            failed: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId} COLLATE "C") FILTER (WHERE ${statsEvents.action} IN (${ACTION_LIST_SQL}))::int`,
+            attempted: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId} COLLATE "C")::int`
+        })
+        .from(bundles)
+        .innerJoin(
+            statsEvents,
+            and(
+                eq(statsEvents.appId, bundles.appId),
+                eq(statsEvents.versionName, bundles.version),
+                sql`${statsEvents.action} IN (${ATTEMPT_LIST_SQL})`,
+                sql`(${bundles.blacklistResetAt} IS NULL OR ${statsEvents.receivedAt} > ${bundles.blacklistResetAt})`
+            )
+        )
+        .where(inArray(bundles.appId, appIds))
+        .groupBy(bundles.id);
+    return new Map(rows.map((r) => [r.id, { attemptedDevices: r.attempted, failedDevices: r.failed }]));
+}
+
 async function aggregateBundleCounts(
     db: Db,
     appId: string,
@@ -289,8 +320,8 @@ async function aggregateBundleCounts(
 ): Promise<BundleCounts> {
     const [row] = await db
         .select({
-            failed: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId}) FILTER (WHERE ${statsEvents.action} IN (${ACTION_LIST_SQL}))::int`,
-            attempted: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId})::int`
+            failed: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId} COLLATE "C") FILTER (WHERE ${statsEvents.action} IN (${ACTION_LIST_SQL}))::int`,
+            attempted: sql<number>`COUNT(DISTINCT ${statsEvents.deviceId} COLLATE "C")::int`
         })
         .from(statsEvents)
         .where(

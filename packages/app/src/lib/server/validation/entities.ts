@@ -179,7 +179,13 @@ export const StatsEventSchema = v.pipe(
         platform: v.nullable(v.string()),
         pluginVersion: v.nullable(v.string()),
         isEmulator: v.nullable(v.boolean()),
-        isProd: v.nullable(v.boolean())
+        isProd: v.nullable(v.boolean()),
+        versionBuild: v.nullable(v.string()),
+        versionCode: v.nullable(v.string()),
+        versionOs: v.nullable(v.string()),
+        channel: v.nullable(v.string()),
+        customId: v.nullable(v.string()),
+        country: v.nullable(v.string())
     }),
     v.title('StatsEvent'),
     v.description('A single telemetry event as persisted in stats_events.')

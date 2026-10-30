@@ -103,6 +103,10 @@ export const bundles = pgTable(
     ]
 );
 
+// Mirror of BUNDLE_BREAKING_ACTIONS in services/analytics.ts. Inlined as SQL
+// because drizzle-kit needs a literal predicate for the partial indexes.
+const BREAKING_ACTIONS_SQL = sql.raw(`'set_fail','update_fail','decrypt_fail','checksum_fail','unzip_fail'`);
+
 export const statsEvents = pgTable(
     'stats_events',
     {
@@ -116,13 +120,70 @@ export const statsEvents = pgTable(
         platform: text('platform'),
         pluginVersion: text('plugin_version'),
         isEmulator: boolean('is_emulator'),
-        isProd: boolean('is_prod')
+        isProd: boolean('is_prod'),
+        // Extra device context the plugin sends with every event. Nullable —
+        // rows recorded before these columns existed have them empty.
+        versionBuild: text('version_build'),
+        versionCode: text('version_code'),
+        versionOs: text('version_os'),
+        channel: text('channel'),
+        customId: text('custom_id'),
+        country: text('country')
     },
     (t) => [
         index('stats_events_app_time_idx').on(t.appId, t.receivedAt),
         index('stats_events_app_action_time_idx').on(t.appId, t.action, t.receivedAt),
-        // For global failure-breakdown / action-time queries that don't filter by app.
-        index('stats_events_action_time_idx').on(t.action, t.receivedAt)
+        // Device timeline on the dashboard.
+        index('stats_events_app_device_time_idx').on(t.appId, t.deviceId, t.receivedAt),
+        // Cross-app window scans and the retention prune. BRIN stays tiny
+        // because rows are appended in received_at order.
+        index('stats_events_received_brin').using('brin', t.receivedAt),
+        // Per-device blacklist probe in /updates.
+        index('stats_events_device_failure_idx')
+            .on(t.appId, t.deviceId, t.versionName)
+            .where(sql`${t.action} IN (${BREAKING_ACTIONS_SQL})`),
+        // Unique-device fail-rate math in services/bundleHealth.ts.
+        index('stats_events_bundle_health_idx')
+            .on(t.appId, t.versionName, t.deviceId, t.action)
+            .where(sql`${t.action} IN ('set',${BREAKING_ACTIONS_SQL})`)
+    ]
+);
+
+/**
+ * One row per POST /updates call, including the ones that were refused. This
+ * is the only record of what the server told a device and why, so the
+ * dashboard can answer "why isn't this device updating?". `result` is
+ * `'update'` when a bundle was served, otherwise the err200 code returned.
+ */
+export const updateChecks = pgTable(
+    'update_checks',
+    {
+        id: bigserial('id', { mode: 'bigint' }).primaryKey(),
+        receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+        appId: text('app_id').notNull(),
+        deviceId: text('device_id').notNull(),
+        platform: text('platform'),
+        channel: text('channel'),
+        versionName: text('version_name'),
+        versionBuild: text('version_build'),
+        versionCode: text('version_code'),
+        versionOs: text('version_os'),
+        pluginVersion: text('plugin_version'),
+        customId: text('custom_id'),
+        isEmulator: boolean('is_emulator'),
+        isProd: boolean('is_prod'),
+        country: text('country'),
+        result: text('result').notNull(),
+        detail: text('detail'),
+        // Number of active bundles on the channel the resolver considered.
+        candidates: integer('candidates'),
+        bundleId: integer('bundle_id'),
+        bundleVersion: text('bundle_version')
+    },
+    (t) => [
+        index('update_checks_app_time_idx').on(t.appId, t.receivedAt),
+        index('update_checks_app_device_time_idx').on(t.appId, t.deviceId, t.receivedAt),
+        index('update_checks_received_brin').using('brin', t.receivedAt)
     ]
 );
 
@@ -152,6 +213,8 @@ export type Bundle = typeof bundles.$inferSelect;
 export type NewBundle = typeof bundles.$inferInsert;
 export type StatsEvent = typeof statsEvents.$inferSelect;
 export type NewStatsEvent = typeof statsEvents.$inferInsert;
+export type UpdateCheck = typeof updateChecks.$inferSelect;
+export type NewUpdateCheck = typeof updateChecks.$inferInsert;
 export type AdminToken = typeof adminTokens.$inferSelect;
 export type NewAdminToken = typeof adminTokens.$inferInsert;
 export type AdminRole = (typeof adminRoleEnum.enumValues)[number];

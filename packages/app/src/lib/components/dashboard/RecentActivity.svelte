@@ -47,6 +47,11 @@
                     <div class="text-surface-600-400 mt-0.5 flex gap-2 text-[11px]">
                         {#if ev.platform}<span class="shrink-0">{ev.platform}</span>{/if}
                         <span class="min-w-0 truncate font-mono" title={ev.appId}>{ev.appId}</span>
+                        <a
+                            class="anchor shrink-0 font-mono"
+                            href="/dashboard/apps/{ev.appId}/devices/{ev.deviceId}"
+                            title="Device timeline">{ev.deviceId.slice(0, 8)}</a
+                        >
                     </div>
                 </li>
             {/each}

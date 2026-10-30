@@ -1,11 +1,12 @@
 <script lang="ts">
+    import AppSummaryTable from '$lib/components/dashboard/AppSummaryTable.svelte';
     import AutoRollbacksList from '$lib/components/dashboard/AutoRollbacksList.svelte';
     import BundleHealthBanner from '$lib/components/dashboard/BundleHealthBanner.svelte';
     import BundleStateSummary from '$lib/components/dashboard/BundleStateSummary.svelte';
     import PlatformDonut from '$lib/components/dashboard/PlatformDonut.svelte';
     import RecentActivity from '$lib/components/dashboard/RecentActivity.svelte';
     import TimeWindow from '$lib/components/dashboard/TimeWindow.svelte';
-    import UpdateCheckSparkline from '$lib/components/dashboard/UpdateCheckSparkline.svelte';
+    import UpdateOutcomesChart from '$lib/components/dashboard/UpdateOutcomesChart.svelte';
     import type { DashboardWindow } from '$lib/server/validation/analytics.js';
     import { getDashboard } from './overview.remote';
 
@@ -34,18 +35,21 @@
 {/if}
 
 <section class="mb-6">
+    <AppSummaryTable rows={data.apps} />
+</section>
+
+<section class="mb-6 grid gap-4 lg:grid-cols-3">
+    <div class="lg:col-span-2">
+        <UpdateOutcomesChart data={data.outcomes} title="Update checks, all apps" />
+    </div>
+    <PlatformDonut data={data.platform} />
+</section>
+
+<section class="mb-6">
     <BundleStateSummary data={data.bundles} />
 </section>
 
 <section class="mb-6 grid gap-4 lg:grid-cols-2">
-    <PlatformDonut data={data.platform} />
     <AutoRollbacksList data={data.rollbacks} />
-</section>
-
-<section class="mb-6">
-    <UpdateCheckSparkline data={data.checks} />
-</section>
-
-<section class="mb-6">
     <RecentActivity data={data.recent} />
 </section>

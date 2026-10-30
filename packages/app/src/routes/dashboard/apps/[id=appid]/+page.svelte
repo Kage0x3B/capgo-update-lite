@@ -18,6 +18,14 @@
     const health = $derived(await getBundleHealth({ app_id: appId }));
     const healthByBundle = $derived(new Map(health.map((h) => [h.bundleId, h])));
 
+    // The list arrives sorted by channel, then newest semver first.
+    const channels = $derived([...new Set(list.map((b) => b.channel))]);
+    let channelFilter = $state('');
+    let liveOnly = $state(false);
+    const shown = $derived(
+        list.filter((b) => (!channelFilter || b.channel === channelFilter) && (!liveOnly || b.active))
+    );
+
     type Phase = 'idle' | 'zipping' | 'reserving' | 'uploading' | 'committing';
 
     let version = $state('');
@@ -213,13 +221,34 @@
 </section>
 
 <section>
-    <h2 class="h4 mb-3">Bundles</h2>
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 class="h4">Bundles</h2>
+        {#if list.length > 0}
+            <div class="flex flex-wrap items-center gap-3 text-sm">
+                {#if channels.length > 1}
+                    <select class="select w-auto py-1 text-sm" bind:value={channelFilter} aria-label="Channel">
+                        <option value="">All channels</option>
+                        {#each channels as c}
+                            <option value={c}>{c}</option>
+                        {/each}
+                    </select>
+                {/if}
+                <label class="flex items-center gap-2">
+                    <input class="checkbox" type="checkbox" bind:checked={liveOnly} />
+                    <span>Live only</span>
+                </label>
+                <span class="text-surface-600-400 text-xs">{shown.length} of {list.length}</span>
+            </div>
+        {/if}
+    </div>
     {#if list.length === 0}
         <p class="text-surface-600-400">No bundles yet. Upload one above.</p>
+    {:else if shown.length === 0}
+        <p class="text-surface-600-400">No bundles match the filter.</p>
     {:else}
         <!-- Mobile: card list -->
         <ul class="space-y-3 md:hidden">
-            {#each list as b}
+            {#each shown as b (b.id)}
                 {@const nativeCount = Object.keys(b.nativePackages).length}
                 {@const hRow = healthByBundle.get(b.id)}
                 {@const showAlert = hRow && (hRow.severity === 'auto_disabled' || hRow.severity === 'at_risk')}
@@ -370,7 +399,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {#each list as b}
+                    {#each shown as b (b.id)}
                         {@const nativeCount = Object.keys(b.nativePackages).length}
                         {@const hRow = healthByBundle.get(b.id)}
                         {@const showAlert = hRow && (hRow.severity === 'auto_disabled' || hRow.severity === 'at_risk')}

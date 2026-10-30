@@ -92,7 +92,9 @@ For a manual deploy, paste the ID into `packages/app/wrangler.jsonc` yourself:
 pnpm db:push       # fastest path for first-time setup
 ```
 
-Schema source: [`packages/app/src/lib/server/db/schema.ts`](./packages/app/src/lib/server/db/schema.ts), defining four tables (`apps`, `bundles`, `stats_events`, `admin_tokens`). Existing migration SQL lives under `packages/app/drizzle/`.
+Schema source: [`packages/app/src/lib/server/db/schema.ts`](./packages/app/src/lib/server/db/schema.ts), defining five tables (`apps`, `bundles`, `stats_events`, `update_checks`, `admin_tokens`). Migration SQL lives under `packages/app/drizzle/`.
+
+`db:push` syncs the schema file straight into the database and is enough for a fresh install. To upgrade an existing database, run `pnpm db:push` again after pulling, or apply the SQL files with `POSTGRES_URL=... pnpm db:migrate` if you have used migrations from the start. Don't mix the two on one database: `db:migrate` replays every file that isn't recorded as applied.
 
 ## R2 + CORS setup
 
@@ -140,7 +142,7 @@ The Worker registers two Cloudflare Cron Triggers (declared in [`wrangler.jsonc`
 
 | Schedule                       | Job             | Behavior                                                                                                                                 |
 | ------------------------------ | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `0 3 * * *` (daily, 03:00 UTC) | `prune-stats`   | Deletes `stats_events` older than `STATS_RETENTION_DAYS` (default 90, set 0 to disable).                                                 |
+| `0 3 * * *` (daily, 03:00 UTC) | `prune-stats`   | Deletes `stats_events` and `update_checks` older than `STATS_RETENTION_DAYS` (default 90, set 0 to disable).                             |
 | `0 * * * *` (hourly)           | `prune-orphans` | Deletes `bundles` rows still in `state='pending'` after 24h (init→commit flows that never completed) and their R2 objects (best-effort). |
 
 Both jobs are gated by `CRON_SECRET`. Set it once after deploy:
@@ -322,15 +324,15 @@ sequenceDiagram
 
 ### Environment variables
 
-| Name                      | Where                                                   | Purpose                                                                                   |
-| ------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `PRIVATE_ADMIN_TOKEN`     | `.env` (build-time; baked in via `$env/static/private`) | Bootstrap super-admin bearer token for `/admin/*` + dashboard login. Always role `admin`. |
-| `R2_S3_ENDPOINT`          | `wrangler secret put`                                   | R2 S3-compatible endpoint URL                                                             |
-| `R2_ACCESS_KEY_ID`        | `wrangler secret put`                                   | R2 API token access key                                                                   |
-| `R2_SECRET_ACCESS_KEY`    | `wrangler secret put`                                   | matching secret                                                                           |
-| `R2_DOWNLOAD_TTL_SECONDS` | `wrangler secret put` (optional)                        | Lifetime of presigned bundle GET URLs handed to devices. Default 3600 (1h).               |
-| `STATS_RETENTION_DAYS`    | `wrangler secret put` (optional)                        | Days of `stats_events` history to keep. Default 90. Set to 0/empty to disable pruning.    |
-| `CRON_SECRET`             | `wrangler secret put` (required for cron)               | Bearer token for the internal `/cron/[job]` endpoint. Without it, scheduled jobs no-op.   |
+| Name                      | Where                                                   | Purpose                                                                                           |
+| ------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `PRIVATE_ADMIN_TOKEN`     | `.env` (build-time; baked in via `$env/static/private`) | Bootstrap super-admin bearer token for `/admin/*` + dashboard login. Always role `admin`.         |
+| `R2_S3_ENDPOINT`          | `wrangler secret put`                                   | R2 S3-compatible endpoint URL                                                                     |
+| `R2_ACCESS_KEY_ID`        | `wrangler secret put`                                   | R2 API token access key                                                                           |
+| `R2_SECRET_ACCESS_KEY`    | `wrangler secret put`                                   | matching secret                                                                                   |
+| `R2_DOWNLOAD_TTL_SECONDS` | `wrangler secret put` (optional)                        | Lifetime of presigned bundle GET URLs handed to devices. Default 3600 (1h).                       |
+| `STATS_RETENTION_DAYS`    | `wrangler secret put` (optional)                        | Days of `stats_events` and `update_checks` history to keep. Default 90. 0/empty disables pruning. |
+| `CRON_SECRET`             | `wrangler secret put` (required for cron)               | Bearer token for the internal `/cron/[job]` endpoint. Without it, scheduled jobs no-op.           |
 
 ### Wrangler bindings
 

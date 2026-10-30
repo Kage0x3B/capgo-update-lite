@@ -13,13 +13,10 @@
         manually_disabled: 4,
         healthy: 5
     };
+    // Array.sort is stable, so ties keep the server order (channel, then
+    // newest semver first) instead of a string compare that puts 1.10 before 1.9.
     const sorted = $derived(
-        [...rows].sort(
-            (a, b) =>
-                SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
-                b.failRate - a.failRate ||
-                a.version.localeCompare(b.version)
-        )
+        [...rows].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.failRate - a.failRate)
     );
 </script>
 
