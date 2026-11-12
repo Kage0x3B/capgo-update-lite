@@ -148,18 +148,29 @@ export const ACTION_LABELS: Record<StatsAction, string> = {
     blocked_by_server_url: 'Blocked by server URL'
 };
 
-/** Grouped for the filter dropdown's `<optgroup>`s. */
-export const ACTION_GROUPS: Array<{ label: string; actions: StatsAction[] }> = [
+export type ActionGroupKey = 'lifecycle' | 'resolution' | 'download' | 'appstate' | 'failure' | 'channel' | 'block';
+
+/**
+ * Actions grouped by what they mean. Drives the filter menu, the `@key` group
+ * tokens in explorer URLs, and the colour of action badges and chart series.
+ */
+export const ACTION_GROUPS: Array<{ key: ActionGroupKey; label: string; color: string; actions: StatsAction[] }> = [
     {
+        key: 'lifecycle',
         label: 'Lifecycle',
+        color: 'var(--color-primary-500)',
         actions: ['set', 'get', 'delete', 'reset', 'uninstall', 'ping']
     },
     {
+        key: 'resolution',
         label: 'Update resolution',
+        color: 'var(--color-success-500)',
         actions: ['noNew', 'missingBundle', 'needPlanUpgrade']
     },
     {
+        key: 'download',
         label: 'Download progress',
+        color: 'var(--color-secondary-500)',
         actions: [
             'download_zip_start',
             'download_0',
@@ -179,11 +190,15 @@ export const ACTION_GROUPS: Array<{ label: string; actions: StatsAction[] }> = [
         ]
     },
     {
+        key: 'appstate',
         label: 'App state',
+        color: 'var(--color-surface-400-600)',
         actions: ['app_moved_to_foreground', 'app_moved_to_background']
     },
     {
+        key: 'failure',
         label: 'Failures',
+        color: 'var(--color-error-500)',
         actions: [
             'set_fail',
             'update_fail',
@@ -202,7 +217,9 @@ export const ACTION_GROUPS: Array<{ label: string; actions: StatsAction[] }> = [
         ]
     },
     {
+        key: 'channel',
         label: 'Channels',
+        color: 'var(--color-tertiary-500)',
         actions: [
             'setChannel',
             'getChannel',
@@ -212,7 +229,9 @@ export const ACTION_GROUPS: Array<{ label: string; actions: StatsAction[] }> = [
         ]
     },
     {
+        key: 'block',
         label: 'Blocks',
+        color: 'var(--color-warning-500)',
         actions: [
             'disablePlatformIos',
             'disablePlatformAndroid',
@@ -237,4 +256,16 @@ export const ACTION_GROUPS: Array<{ label: string; actions: StatsAction[] }> = [
 export function actionLabel(raw: string | null | undefined): string {
     if (!raw) return '—';
     return (ACTION_LABELS as Record<string, string>)[raw] ?? raw;
+}
+
+const GROUP_BY_ACTION = new Map<string, (typeof ACTION_GROUPS)[number]>();
+for (const g of ACTION_GROUPS) for (const a of g.actions) GROUP_BY_ACTION.set(a, g);
+
+/** The group an action belongs to, or undefined for unknown / null actions. */
+export function actionGroup(raw: string | null | undefined): (typeof ACTION_GROUPS)[number] | undefined {
+    return raw ? GROUP_BY_ACTION.get(raw) : undefined;
+}
+
+export function actionGroupByKey(key: string): (typeof ACTION_GROUPS)[number] | undefined {
+    return ACTION_GROUPS.find((g) => g.key === key);
 }

@@ -30,7 +30,10 @@
     <title>{appId} — Stats</title>
 </svelte:head>
 
-<div class="mb-6 flex justify-end">
+<div class="mb-6 flex flex-wrap items-center justify-end gap-3">
+    <a class="anchor text-sm" href="/dashboard/stats?app={encodeURIComponent(appId)}&range={win}"
+        >Raw events in the explorer →</a
+    >
     <TimeWindow bind:value={win} />
 </div>
 

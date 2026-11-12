@@ -9,6 +9,11 @@ export const handle: Handle = async ({ event, resolve }) => {
     event.locals.auth = null;
 
     const isDashboard = event.url.pathname.startsWith('/dashboard');
+    // Remote function calls made from the browser (query refreshes, new
+    // arguments) arrive on SvelteKit's own endpoint, where event.url is not
+    // the dashboard page. They carry the same session cookie and need the
+    // same auth resolved.
+    const isRemote = event.isRemoteRequest;
     const isAdminApi = event.url.pathname.startsWith('/admin');
 
     // Fail closed and loud when the build-time admin secret is missing.
@@ -19,6 +24,11 @@ export const handle: Handle = async ({ event, resolve }) => {
             500,
             'PRIVATE_ADMIN_TOKEN is not set. It must be provided at build time (see README → "Quickstart: one-click deploy") before the dashboard or admin API can be used.'
         );
+    }
+
+    if (isRemote && PRIVATE_ADMIN_TOKEN) {
+        const verified = await verifySession(event.cookies.get(SESSION_COOKIE), PRIVATE_ADMIN_TOKEN);
+        event.locals.auth = verified ? { role: verified.role, tokenId: null } : null;
     }
 
     if (isDashboard) {

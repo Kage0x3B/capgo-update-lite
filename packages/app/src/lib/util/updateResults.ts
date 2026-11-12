@@ -88,3 +88,15 @@ export const CATEGORY_COLORS: Record<ResultCategory, string> = {
     setup: 'var(--color-tertiary-500)',
     invalid: 'var(--color-error-500)'
 };
+
+/** Every known result code, in display order. */
+export const RESULT_CODES: string[] = Object.keys(RESULTS);
+
+/** Known result codes of one category. Unknown codes count as `invalid` but can't be listed. */
+export function resultCodesIn(category: ResultCategory): string[] {
+    return RESULT_CODES.filter((c) => RESULTS[c].category === category);
+}
+
+export function isResultCategory(v: string): v is ResultCategory {
+    return (CATEGORY_ORDER as string[]).includes(v);
+}

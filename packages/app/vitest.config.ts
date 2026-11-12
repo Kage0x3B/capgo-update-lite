@@ -19,6 +19,9 @@ export default defineConfig({
     test: {
         environment: 'node',
         globals: false,
-        include: ['src/lib/**/*.test.ts']
+        include: ['src/lib/**/*.test.ts'],
+        // The *.db.test.ts files share one TEST_DATABASE_URL and truncate it in
+        // beforeAll, so they must not run side by side.
+        fileParallelism: !process.env.TEST_DATABASE_URL
     }
 });
