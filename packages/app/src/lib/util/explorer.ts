@@ -40,6 +40,9 @@ const PRESET_MS: Record<RangePreset, number> = {
     '90d': 90 * 86_400_000
 };
 
+/** Cookie holding the app last picked in the stats app picker ('' = all apps). */
+export const LAST_APP_COOKIE = 'explorer_app';
+
 /** Longest custom window the server accepts. Retention is 90d by default. */
 export const MAX_SPAN_MS = 400 * 86_400_000;
 

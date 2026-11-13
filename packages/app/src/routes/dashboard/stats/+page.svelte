@@ -4,6 +4,7 @@
     import { page } from '$app/state';
     import { Columns3, Download, Radio, Search } from '@lucide/svelte';
     import AddFilter from '$lib/components/explorer/AddFilter.svelte';
+    import AppPicker from '$lib/components/explorer/AppPicker.svelte';
     import EventTable, { COLUMNS, DEFAULT_COLUMNS, type ColumnKey } from '$lib/components/explorer/EventTable.svelte';
     import FacetPanel from '$lib/components/explorer/FacetPanel.svelte';
     import FilterChips from '$lib/components/explorer/FilterChips.svelte';
@@ -18,6 +19,7 @@
     import {
         DIM_BY_KEY,
         DIMENSIONS,
+        LAST_APP_COOKIE,
         parseQuery,
         readableQuery,
         SOURCES,
@@ -78,6 +80,19 @@
     const dense = new Persisted<boolean>('explorer.dense', false);
     const collapse = new Persisted<boolean>('explorer.collapse', true);
 
+    // The app is the first thing almost every look at this page narrows by, so
+    // the picker remembers it in a cookie; +page.server.ts sends a bare
+    // /dashboard/stats to the last app. "All apps" clears it.
+    function pickApp(appId: string | null) {
+        document.cookie = appId
+            ? `${LAST_APP_COOKIE}=${encodeURIComponent(appId)}; path=/dashboard/stats; max-age=31536000; samesite=lax`
+            : `${LAST_APP_COOKIE}=; path=/dashboard/stats; max-age=0; samesite=lax`;
+        const dims = { ...q.dims };
+        if (appId) dims.app = { in: [appId], out: [] };
+        else delete dims.app;
+        setQuery({ ...q, dims });
+    }
+
     onMount(() => {
         columns.load((v, init) => (Array.isArray(v) ? (v as ColumnKey[]) : init));
         timeMode.load();
@@ -131,8 +146,19 @@
 {/snippet}
 
 <header class="mb-4 flex flex-wrap items-end justify-between gap-3">
-    <div>
-        <h1 class="h3 sm:h2">Stats</h1>
+    <div class="min-w-0 flex-1 basis-80 space-y-2">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <h1 class="h3 sm:h2">Stats</h1>
+            <div class="min-w-0 basis-full sm:basis-auto">
+                <svelte:boundary>
+                    <AppPicker {q} onpick={pickApp} />
+                    {#snippet pending()}
+                        <div class="bg-surface-200-800 h-10 w-72 max-w-full animate-pulse rounded"></div>
+                    {/snippet}
+                    {#snippet failed(e, reset)}{@render errorBox(e, reset)}{/snippet}
+                </svelte:boundary>
+            </div>
+        </div>
         <p class="text-surface-600-400 text-sm">Plugin events and update checks from every device. Newest first.</p>
     </div>
     <div class="flex flex-wrap items-center gap-2">

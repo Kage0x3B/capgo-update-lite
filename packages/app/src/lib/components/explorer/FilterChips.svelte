@@ -1,5 +1,6 @@
 <script lang="ts">
     import { X } from '@lucide/svelte';
+    import { pinnedApp } from './AppPicker.svelte';
     import {
         DIMENSIONS,
         valueLabel,
@@ -26,6 +27,8 @@
         for (const d of DIMENSIONS) {
             const f = q.dims[d.key];
             if (!f) continue;
+            // A single picked app lives in the app picker at the top, not here.
+            if (d.key === 'app' && pinnedApp(q)) continue;
             for (const v of f.in) {
                 out.push({
                     key: `${d.key}:${v}`,
@@ -72,7 +75,9 @@
     }
 
     function clearAll() {
-        onchange({ ...q, dims: {}, q: '', prod: 'any', emulator: 'any' });
+        // Keep the app: it is picked separately and everything else narrows within it.
+        const app = pinnedApp(q);
+        onchange({ ...q, dims: app ? { app: q.dims.app } : {}, q: '', prod: 'any', emulator: 'any' });
     }
 </script>
 
