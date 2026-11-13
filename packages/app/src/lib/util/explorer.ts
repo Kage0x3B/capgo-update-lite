@@ -70,7 +70,8 @@ export type DimInfo = {
 };
 
 export const DIMENSIONS: DimInfo[] = [
-    { key: 'app', label: 'App', sources: ['events', 'checks'], facet: true },
+    // No facet: the app picker at the top of the page owns this dimension.
+    { key: 'app', label: 'App', sources: ['events', 'checks'], facet: false },
     { key: 'action', label: 'Action', sources: ['events'], facet: true },
     { key: 'result', label: 'Answer', sources: ['checks'], facet: true },
     { key: 'version', label: 'Bundle', sources: ['events', 'checks'], facet: true },

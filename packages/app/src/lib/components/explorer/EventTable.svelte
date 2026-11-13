@@ -198,6 +198,11 @@
 {#if rows.length === 0}
     <div class="card preset-filled-surface-100-900 text-surface-600-400 p-8 text-center text-sm">
         Nothing matches. Widen the time range or remove a filter.
+        {#if !q.appState && q.source !== 'checks'}
+            <br />App open/close events are hidden;
+            <button type="button" class="underline" onclick={() => onchange({ ...q, appState: true })}>show them</button
+            >.
+        {/if}
     </div>
 {:else}
     <div class="table-wrap">

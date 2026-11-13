@@ -28,7 +28,6 @@
         'channel',
         'plugin',
         'country',
-        'app',
         'device'
     ];
     const dims = $derived(ORDER.filter((d) => (facets[d]?.length ?? 0) > 0));
