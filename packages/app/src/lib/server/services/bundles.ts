@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { ApiError } from '$lib/server/defineRoute.js';
 import { apps, bundles, type Bundle } from '$lib/server/db/schema.js';
@@ -79,7 +79,11 @@ export async function initBundle(db: Db, env: R2Env, input: InitBundleInput): Pr
     const platforms = input.platforms ?? ['ios', 'android'];
     const r2Key = `${input.app_id}/${input.version}/${nanoid(10)}.zip`;
 
-    const [app] = await db.select().from(apps).where(eq(apps.id, input.app_id)).limit(1);
+    const [app] = await db
+        .select()
+        .from(apps)
+        .where(and(eq(apps.id, input.app_id), isNull(apps.deletedAt)))
+        .limit(1);
     if (!app) throw new ApiError(404, 'not_found', `Unknown app_id: ${input.app_id}`);
 
     const [existing] = await db

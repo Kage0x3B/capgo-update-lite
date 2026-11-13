@@ -1,7 +1,9 @@
 <script lang="ts">
     import { untrack } from 'svelte';
+    import { goto } from '$app/navigation';
     import { page } from '$app/state';
-    import { getAppById, getApps, patchAppCommand } from '../../apps.remote';
+    import { Trash2 } from '@lucide/svelte';
+    import { deleteAppCommand, getAppById, getApps, getAppsWithHealth, patchAppCommand } from '../../apps.remote';
 
     const appId = $derived(page.params.id ?? '');
     const app = $derived(await getAppById({ id: appId }));
@@ -90,6 +92,26 @@
             error = err instanceof Error ? err.message : String(err);
         } finally {
             saving = false;
+        }
+    }
+
+    // --- delete (soft) ---------------------------------------------------------
+    let confirmId = $state('');
+    let deleting = $state(false);
+    let deleteError = $state<string | null>(null);
+
+    async function remove(e: SubmitEvent) {
+        e.preventDefault();
+        if (confirmId.trim() !== appId) return;
+        deleteError = null;
+        deleting = true;
+        try {
+            await deleteAppCommand({ id: appId });
+            await Promise.all([getApps().refresh(), getAppsWithHealth().refresh()]);
+            await goto('/dashboard/apps');
+        } catch (err) {
+            deleteError = err instanceof Error ? err.message : String(err);
+            deleting = false;
         }
     }
 
@@ -239,4 +261,25 @@
             <div class="preset-tonal-error p-3 text-sm">{error}</div>
         {/if}
     </form>
+</section>
+
+<section class="card border-error-500/40 mt-6 max-w-2xl border p-4 sm:p-5">
+    <h2 class="h5 text-error-600-400 flex items-center gap-2"><Trash2 class="size-5" /> Delete app</h2>
+    <p class="text-surface-600-400 mt-2 text-sm">
+        The app disappears from the dashboard and the CLI. Devices asking for updates get "unknown app" and their stats
+        are no longer recorded. Bundles, uploaded files and past stats are kept, so adding the same app id again
+        restores it.
+    </p>
+    <form class="mt-4 flex flex-wrap items-end gap-3" onsubmit={remove}>
+        <label class="label min-w-60 flex-1">
+            <span class="label-text">Type <code>{appId}</code> to confirm</span>
+            <input class="input" bind:value={confirmId} autocomplete="off" spellcheck="false" />
+        </label>
+        <button class="btn preset-filled-error-500" type="submit" disabled={deleting || confirmId.trim() !== appId}>
+            {deleting ? 'Deleting…' : 'Delete app'}
+        </button>
+    </form>
+    {#if deleteError}
+        <div class="preset-tonal-error mt-3 p-3 text-sm">{deleteError}</div>
+    {/if}
 </section>

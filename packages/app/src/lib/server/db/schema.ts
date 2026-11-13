@@ -55,7 +55,11 @@ export const apps = pgTable('apps', {
     failWarnRate: real('fail_warn_rate'),
     failRiskRate: real('fail_risk_rate'),
     failRateThreshold: real('fail_rate_threshold'),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // Soft delete. A deleted app is hidden everywhere and treated as unknown by
+    // /updates and /stats, but its row, bundles and history stay so the id
+    // keeps pointing at the same records. Re-adding the id restores it.
+    deletedAt: timestamp('deleted_at', { withTimezone: true })
 });
 
 export const bundles = pgTable(

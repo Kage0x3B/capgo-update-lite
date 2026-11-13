@@ -1,7 +1,7 @@
 import { defineRoute } from '$lib/server/defineRoute.js';
 import { AppIdParamsSchema, AppPatchSchema } from '$lib/server/validation/admin.js';
 import { AppSchema } from '$lib/server/validation/entities.js';
-import { getApp, patchApp } from '$lib/server/services/apps.js';
+import { deleteApp, getApp, patchApp } from '$lib/server/services/apps.js';
 
 export const GET = defineRoute(
     {
@@ -33,4 +33,20 @@ export const PATCH = defineRoute(
         }
     },
     async ({ params, body, db }) => patchApp(db, params.id, body)
+);
+
+export const DELETE = defineRoute(
+    {
+        auth: 'admin',
+        params: AppIdParamsSchema,
+        response: AppSchema,
+        meta: {
+            operationId: 'deleteApp',
+            summary: 'Delete an app',
+            description:
+                'Soft delete: the app disappears from lists and lookups, /updates answers "unknown app" for it and new /stats events for it are dropped. Bundles, stored files and recorded stats stay. Re-adding the same id with POST /admin/apps restores it. Returns the deleted row.',
+            tags: ['admin']
+        }
+    },
+    async ({ params, db }) => deleteApp(db, params.id)
 );

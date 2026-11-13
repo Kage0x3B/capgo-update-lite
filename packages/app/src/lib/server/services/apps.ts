@@ -1,24 +1,51 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '$lib/server/defineRoute.js';
 import { apps, type App } from '$lib/server/db/schema.js';
 import type { Db } from '$lib/server/db/index.js';
 import { isValidSemver } from '$lib/server/semver.js';
 
+/** WHERE clause for apps that are not soft-deleted. */
+export const appIsLive = isNull(apps.deletedAt);
+
 export async function listApps(db: Db): Promise<App[]> {
-    return db.select().from(apps);
+    return db.select().from(apps).where(appIsLive);
 }
 
+/**
+ * Create an app, or rename an existing one. Re-adding a deleted app restores
+ * it with its old settings, bundles and history.
+ */
 export async function upsertApp(db: Db, input: { id: string; name: string }): Promise<App> {
     const [row] = await db
         .insert(apps)
         .values({ id: input.id, name: input.name })
-        .onConflictDoUpdate({ target: apps.id, set: { name: input.name } })
+        .onConflictDoUpdate({ target: apps.id, set: { name: input.name, deletedAt: null } })
         .returning();
     return row;
 }
 
 export async function getApp(db: Db, id: string): Promise<App> {
-    const [row] = await db.select().from(apps).where(eq(apps.id, id)).limit(1);
+    const [row] = await db
+        .select()
+        .from(apps)
+        .where(and(eq(apps.id, id), appIsLive))
+        .limit(1);
+    if (!row) throw new ApiError(404, 'not_found', `Unknown app_id: ${id}`);
+    return row;
+}
+
+/**
+ * Delete an app. Always a soft delete: the row gets a deleted_at stamp and
+ * drops out of every list and lookup. Devices asking /updates for it get
+ * "unknown app", and new /stats events for it are discarded. Bundles, R2
+ * objects and recorded stats are left as they are.
+ */
+export async function deleteApp(db: Db, id: string): Promise<App> {
+    const [row] = await db
+        .update(apps)
+        .set({ deletedAt: sql`now()` })
+        .where(and(eq(apps.id, id), appIsLive))
+        .returning();
     if (!row) throw new ApiError(404, 'not_found', `Unknown app_id: ${id}`);
     return row;
 }

@@ -100,6 +100,7 @@ export function registerCompletions(program: CommanderCommand): RootCommand {
     // Command instances exposed via completion.commands.
     attachPositional(completion, 'apps get', 'app-id', completeAppIdArg);
     attachPositional(completion, 'apps set-policy', 'app-id', completeAppIdArg);
+    attachPositional(completion, 'apps delete', 'app-id', completeAppIdArg);
     attachPositional(completion, 'bundles health', 'app-id', completeAppIdArg);
     attachPositional(completion, 'bundles promote', 'version', completeBundleVersion);
 

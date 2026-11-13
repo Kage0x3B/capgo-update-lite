@@ -50,6 +50,13 @@
       "when": 1793367402458,
       "tag": "0006_stats_debug_data",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794557333668,
+      "tag": "0007_app_soft_delete",
+      "breakpoints": true
     }
   ]
 }

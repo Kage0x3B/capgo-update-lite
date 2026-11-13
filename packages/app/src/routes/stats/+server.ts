@@ -1,6 +1,6 @@
 import * as v from 'valibot';
 import { defineRoute } from '$lib/server/defineRoute.js';
-import { inArray } from 'drizzle-orm';
+import { and, inArray, isNull } from 'drizzle-orm';
 import { apps, statsEvents, type NewStatsEvent } from '$lib/server/db/schema.js';
 import { countryOf } from '$lib/server/services/updateChecks.js';
 import { bres, err200 } from '$lib/server/responses.js';
@@ -54,13 +54,18 @@ export const POST = defineRoute(
             return { ok: false, message: result.issues.map((i) => i.message).join('; ') };
         });
 
-        // Only keep events for registered apps, so anonymous callers can't
+        // Only keep events for registered, not deleted apps, so anonymous callers can't
         // fill stats_events with junk app ids. One indexed lookup per batch.
         const appIds = [...new Set(parsed.flatMap((p) => (p.ok ? [p.value.app_id] : [])))];
         const known = new Set(
             appIds.length === 0
                 ? []
-                : (await db.select({ id: apps.id }).from(apps).where(inArray(apps.id, appIds))).map((r) => r.id)
+                : (
+                      await db
+                          .select({ id: apps.id })
+                          .from(apps)
+                          .where(and(inArray(apps.id, appIds), isNull(apps.deletedAt)))
+                  ).map((r) => r.id)
         );
         const country = countryOf(platform);
 

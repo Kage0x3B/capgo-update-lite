@@ -19,6 +19,7 @@ export type AppRow = {
     failRiskRate: number | null;
     failRateThreshold: number | null;
     createdAt: string;
+    deletedAt: string | null;
 };
 
 export type BundleHealthSeverity = 'healthy' | 'noisy' | 'warning' | 'at_risk' | 'auto_disabled' | 'manually_disabled';

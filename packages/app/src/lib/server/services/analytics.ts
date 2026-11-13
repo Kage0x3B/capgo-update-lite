@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { apps, bundles, statsEvents, updateChecks } from '$lib/server/db/schema.js';
 import type { Db } from '$lib/server/db/index.js';
 import { compareSemver, compareVersionsDesc, parseSemver } from '$lib/server/semver.js';
@@ -686,7 +686,9 @@ export async function appSummaries(db: Db, f: AnalyticsFilters): Promise<AppSumm
     }
     // Rows written before /stats started rejecting unknown app ids can still
     // be in the window; only show registered apps.
-    const registered = new Set((await db.select({ id: apps.id }).from(apps)).map((a) => a.id));
+    const registered = new Set(
+        (await db.select({ id: apps.id }).from(apps).where(isNull(apps.deletedAt))).map((a) => a.id)
+    );
     return [...byApp.values()].filter((r) => registered.has(r.appId)).sort((a, b) => b.activeDevices - a.activeDevices);
 }
 

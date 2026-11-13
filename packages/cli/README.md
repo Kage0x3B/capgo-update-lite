@@ -53,11 +53,11 @@ capgo-update-lite complete powershell >> $PROFILE
 What gets completed:
 
 - **Static enums** — `--platforms`, `--platform`, `--state`, `--disable-auto-update`.
-- **App IDs** — `--app` / `--app-id` (and the positional on `apps get` / `apps set-policy`) hit `GET /admin/apps`.
+- **App IDs** — `--app` / `--app-id` (and the positional on `apps get` / `apps set-policy` / `apps delete`) hit `GET /admin/apps`.
 - **Channels** — `--channel` enumerates distinct channels seen on the resolved app's bundles.
 - **Bundle versions** — the positional on `bundles promote <version>` lists `state=active` rows for the resolved `(appId, channel)` scope.
 
-Dynamic completions need `CAPGO_SERVER_URL` + `CAPGO_ADMIN_TOKEN` available at TAB time (env or in `capgo-update.config.json` in the cwd). They use a 5-minute on-disk cache at `${XDG_CACHE_HOME:-~/.cache}/capgo-update-lite/`; CLI write commands (`apps add` / `set-policy`, `bundles delete` / `edit` / `promote`, `publish`) invalidate the matching entries automatically. Each completion fetch has a 1.5 s timeout and falls back silently to "no completions" on any error — TAB never hangs the shell prompt.
+Dynamic completions need `CAPGO_SERVER_URL` + `CAPGO_ADMIN_TOKEN` available at TAB time (env or in `capgo-update.config.json` in the cwd). They use a 5-minute on-disk cache at `${XDG_CACHE_HOME:-~/.cache}/capgo-update-lite/`; CLI write commands (`apps add` / `set-policy` / `delete`, `bundles delete` / `edit` / `promote`, `publish`) invalidate the matching entries automatically. Each completion fetch has a 1.5 s timeout and falls back silently to "no completions" on any error — TAB never hangs the shell prompt.
 
 ## Subcommands
 
@@ -156,6 +156,14 @@ pnpx capgo-update-lite-cli apps set-policy <app-id> \
 ```
 
 `--min-plugin-version null` clears the floor. Without `--no-disable-auto-update-under-native` the under-native guard stays at whatever value the server holds. The `--fail-*` flags override the broken-bundle severity ladder per-app — pass `null` to clear an override and fall back to env / server default. Order is enforced server-side: `warn ≤ risk ≤ disable`. Set `--fail-rate-threshold 0` (or `--fail-min-devices 0`) to disable auto-disable for this app while keeping severity classification for the dashboard / `bundles health`.
+
+### `apps delete`
+
+Delete an app. Always a soft delete: the app disappears from lists, `/updates` answers "unknown app" for it and new stats for it are dropped, but its bundles, uploaded files and recorded stats stay. Running `apps add` with the same id restores it with its old settings. Asks for confirmation; pass `--yes` in scripts.
+
+```sh
+pnpx capgo-update-lite-cli apps delete <app-id> [--yes]
+```
 
 ### `bundles list`
 

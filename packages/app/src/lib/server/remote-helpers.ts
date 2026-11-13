@@ -1,6 +1,7 @@
 import { getRequestEvent } from '$app/server';
 import { error } from '@sveltejs/kit';
 import { createDb, type Db } from '$lib/server/db/index.js';
+import { ApiError } from '$lib/server/defineRoute.js';
 import type { R2Env } from '$lib/server/r2.js';
 
 type RemoteContext = {
@@ -29,6 +30,11 @@ export async function withDb<T>(fn: (db: Db) => Promise<T>): Promise<T> {
     const handle = createDb(env.HYPERDRIVE);
     try {
         return await fn(handle.db);
+    } catch (e) {
+        // Services throw ApiError for the REST routes. Turn it into a SvelteKit
+        // HttpError so the dashboard shows e.g. a 404 page, not a 500.
+        if (e instanceof ApiError) error(e.status, e.message);
+        throw e;
     } finally {
         waitUntil(handle.close());
     }

@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { apps, bundles, statsEvents, type Bundle } from '$lib/server/db/schema.js';
 import type { Db } from '$lib/server/db/index.js';
 import { BUNDLE_BREAKING_ACTIONS } from './analytics.js';
@@ -215,7 +215,8 @@ export async function appsNeedingAttention(db: Db, env: BundleHealthEnv): Promis
             failRiskRate: apps.failRiskRate,
             failRateThreshold: apps.failRateThreshold
         })
-        .from(apps);
+        .from(apps)
+        .where(isNull(apps.deletedAt));
     if (allApps.length === 0) return [];
 
     const [allBundles, counts] = await Promise.all([

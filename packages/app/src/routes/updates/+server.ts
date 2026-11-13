@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { defineRoute } from '$lib/server/defineRoute.js';
 import { apps, bundles, statsEvents, type Bundle } from '$lib/server/db/schema.js';
 import { err200, resToVersion } from '$lib/server/responses.js';
@@ -174,7 +174,7 @@ async function resolveUpdate(body: UpdatesRequest, db: Db, env: App.Platform['en
                 )`
             )
         )
-        .where(eq(apps.id, body.app_id));
+        .where(and(eq(apps.id, body.app_id), isNull(apps.deletedAt)));
 
     if (rows.length === 0) return refuse('no_app', `Unknown app_id: ${body.app_id}`);
     const app = rows[0].app;

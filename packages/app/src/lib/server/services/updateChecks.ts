@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { apps, updateChecks, type NewUpdateCheck } from '$lib/server/db/schema.js';
 import type { Db } from '$lib/server/db/index.js';
 
@@ -74,7 +74,11 @@ export async function recordUpdateCheck(
     if (!ctx.appId || !ctx.deviceId) return;
     try {
         if (!appKnown) {
-            const [app] = await db.select({ id: apps.id }).from(apps).where(eq(apps.id, ctx.appId)).limit(1);
+            const [app] = await db
+                .select({ id: apps.id })
+                .from(apps)
+                .where(and(eq(apps.id, ctx.appId), isNull(apps.deletedAt)))
+                .limit(1);
             if (!app) return;
         }
         await db.insert(updateChecks).values({

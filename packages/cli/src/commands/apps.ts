@@ -4,6 +4,7 @@ import { resolveConfig } from '../config.js';
 import { done, enterJsonMode, fail, kv, printJson, start, table } from '../output.js';
 import { completionCache } from '../completion.js';
 import { appIdError } from '../validators.js';
+import { confirmDeleteApp, isInteractive } from '../prompt.js';
 
 export const CEILINGS = ['none', 'patch', 'minor', 'major'] as const;
 type Ceiling = (typeof CEILINGS)[number];
@@ -90,6 +91,30 @@ export function registerApps(program: Command): void {
             );
             await completionCache.invalidateApps().catch(() => {});
             done(`Registered ${row.id} ("${row.name}")`);
+        });
+
+    apps.command('delete <app-id>')
+        .description(
+            'Delete an app (soft delete). Devices get "unknown app" from /updates; bundles and stats are kept. Run `apps add` with the same id to restore it.'
+        )
+        .option('-y, --yes', 'Skip the confirmation prompt')
+        .action(async function action(this: Command, appId: string): Promise<void> {
+            const err = appIdError(appId);
+            if (err) fail(err);
+            const { yes } = this.opts<{ yes?: boolean }>();
+            if (!yes) {
+                if (!isInteractive()) fail('refusing to delete without confirmation: pass --yes');
+                if (!(await confirmDeleteApp(appId))) fail('aborted');
+            }
+            const cfg = await resolveConfig(this, ['serverUrl', 'adminToken']);
+            start(`capgo-update-lite apps delete ${appId}`);
+            await apiJson<AppRow>(
+                { serverUrl: cfg.serverUrl!, adminToken: cfg.adminToken },
+                'DELETE',
+                `/admin/apps/${encodeURIComponent(appId)}`
+            );
+            await completionCache.invalidateApps().catch(() => {});
+            done(`Deleted ${appId} (restore with: apps add ${appId} --name <name>)`);
         });
 
     apps.command('set-policy <app-id>')

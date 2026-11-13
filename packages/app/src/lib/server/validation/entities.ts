@@ -103,7 +103,11 @@ export const AppSchema = v.pipe(
                 v.examples([0.5])
             )
         ),
-        createdAt: v.date()
+        createdAt: v.date(),
+        deletedAt: v.pipe(
+            v.nullable(v.date()),
+            v.description('When the app was deleted (soft delete). Null for live apps.')
+        )
     }),
     v.title('App'),
     v.description('A registered mobile app.')

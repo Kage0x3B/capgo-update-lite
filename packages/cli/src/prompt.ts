@@ -40,6 +40,16 @@ export async function selectBumpLevel(currentVersion: string, channel: string): 
  * Final yes/no gate after the bumped version is known. Defaulting to "no"
  * keeps a stray Enter from writing to package.json on autopilot.
  */
+/** Yes/no gate before soft-deleting an app. Defaults to "no". */
+export async function confirmDeleteApp(appId: string): Promise<boolean> {
+    const result = await clackConfirm({
+        message: `Delete app ${appId}? Devices stop getting updates for it.`,
+        initialValue: false
+    });
+    if (isCancel(result)) return false;
+    return result;
+}
+
 export async function confirmBump(from: string, to: string): Promise<boolean> {
     const result = await clackConfirm({
         message: `Bump version ${from} → ${to} and write package.json?`,

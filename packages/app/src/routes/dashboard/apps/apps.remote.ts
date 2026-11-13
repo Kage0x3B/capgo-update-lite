@@ -2,7 +2,7 @@ import { command, query } from '$app/server';
 import * as v from 'valibot';
 import { requireAdminSession } from '$lib/server/auth.js';
 import { platformEnv, withDb } from '$lib/server/remote-helpers.js';
-import { getApp, listApps, patchApp, upsertApp } from '$lib/server/services/apps.js';
+import { deleteApp, getApp, listApps, patchApp, upsertApp } from '$lib/server/services/apps.js';
 import { appsNeedingAttention, type BundleHealthEnv } from '$lib/server/services/bundleHealth.js';
 import { AppCreateSchema, AppIdParamsSchema, AppPatchSchema } from '$lib/server/validation/admin.js';
 
@@ -46,4 +46,9 @@ const PatchAppInputSchema = v.object({
 export const patchAppCommand = command(PatchAppInputSchema, async ({ id, patch }) => {
     requireAdminSession();
     return withDb((db) => patchApp(db, id, patch));
+});
+
+export const deleteAppCommand = command(AppIdParamsSchema, async ({ id }) => {
+    requireAdminSession();
+    return withDb((db) => deleteApp(db, id));
 });
